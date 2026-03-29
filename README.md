@@ -1,44 +1,161 @@
-# AutoR（Auto Research）
+# AutoR (Auto Research)
 
-AutoR 想做的是一个 AI 辅助研究系统：用户给出一个研究目标后，系统把整个研究过程拆成若干阶段，调用模型在各阶段执行具体任务，并让用户在关键节点审核、修正和推进流程。
+## Overview
 
-这个仓库当前定义的是第一版最小可运行实现，重点是先跑通完整研究工作流，而不是一次性做完整产品。
+AutoR is an AI-assisted research workflow system. A user provides a research goal, the system breaks the work into stages, Claude Code executes each stage, and the user reviews, revises, and approves the output at each checkpoint.
 
-## 项目概述
+This repository defines the first minimal runnable version. The goal is to validate the full research loop end to end before building a fuller product surface. The current MVP runs in the terminal, but the terminal is only the current interaction surface, not the final product form.
 
-AutoR 是一个研究流程编排器。当前 MVP 先在终端中验证完整流程：按固定顺序执行 8 个阶段，每次阶段尝试只调用一次 Claude Code，并且每个阶段结束后都必须人工明确确认，流程才能继续。
+## Architecture
 
-终端只是当前阶段的交互载体，不应被视为最终产品形态。
+### Core Rules
 
-这份文档是第一版最小可运行实现的开发规格说明。
+- Stage order is fixed.
+- `refine` means a full rerun of the current stage.
+- Workflow state should stay simple and file-based.
+- Stages should not exchange complex schemas or custom protocol layers unless there is a proven need later.
+- Unnecessary abstraction is forbidden.
+- Do not introduce plugin systems, generic orchestration frameworks, or over-designed class hierarchies for the MVP.
+- `manager.py` owns workflow control.
+- `operator.py` owns Claude execution.
+- `utils.py` contains shared helpers only.
 
-## MVP 目标
+### Repository Layout
 
-- 固定顺序执行 8 个研究阶段。
-- 每次阶段尝试只调用一次 Claude Code。
-- 每个阶段结束后必须人工确认，不能自动进入下一阶段。
-- 支持四类阶段后操作：
-  - 使用 AI 给出的 refine 建议并重跑当前阶段
-  - 输入用户自定义反馈并重跑当前阶段
-  - 批准当前阶段并进入下一阶段
-  - 终止当前运行
-- 每次运行都必须隔离在 `runs/<run_id>/` 下。
-
-## 设计原则
-
-- 阶段顺序固定，不允许跳过。
-- `refine` 的语义是“完整重跑当前阶段”，不是在上次结果上做增量补丁。
-- Claude 只负责在当前 run 的工作目录中执行任务，不负责流程控制。
-- 只有“已批准阶段”的摘要可以进入 `memory.md`。
-- 所有运行产物必须限制在当前 run 目录内，不能污染仓库其他位置。
-
-## 启动方式
-
-```bash
-python main.py
+```text
+repo/
+├── main.py
+├── src/
+│   ├── manager.py
+│   ├── operator.py
+│   ├── utils.py
+│   └── prompts/
+│       ├── 01_literature_survey.md
+│       ├── 02_hypothesis_generation.md
+│       ├── 03_study_design.md
+│       ├── 04_implementation.md
+│       ├── 05_experimentation.md
+│       ├── 06_analysis.md
+│       ├── 07_writing.md
+│       └── 08_dissemination.md
+└── runs/
 ```
 
-## 固定阶段顺序
+### Module Boundaries
+
+- `main.py`
+  - bootstrap only
+  - reads the initial user goal
+  - instantiates the manager and operator
+- `src/manager.py`
+  - owns the 8-stage loop
+  - creates run directories
+  - builds prompts
+  - handles user choices `1` to `6`
+  - decides rerun, approve, next, and abort behavior
+  - writes approved memory and logs
+  - should use direct control flow, not an event system or workflow framework
+- `src/operator.py`
+  - calls Claude CLI directly
+  - parses `stream-json` output
+  - captures stdout, stderr, and exit code
+  - validates that the required stage markdown exists
+  - should return a minimal execution result only
+  - does not decide workflow transitions
+- `src/utils.py`
+  - stage metadata
+  - path helpers
+  - prompt assembly helpers
+  - markdown parsing helpers
+  - file and log helpers
+  - should remain a pure helper layer, not a second manager
+- `src/prompts/`
+  - version-controlled prompt templates only
+  - never runtime outputs
+
+### Dependency Direction
+
+```text
+main.py -> manager.py -> operator.py
+                    \-> utils.py
+operator.py -> utils.py
+```
+
+## Run Layout
+
+Each execution creates an isolated run directory:
+
+```text
+runs/<run_id>/
+├── user_input.txt
+├── memory.md
+├── logs_raw.jsonl
+├── stages/
+│   ├── 01_literature_survey.md
+│   ├── ...
+├── workspace/
+│   ├── literature/
+│   ├── code/
+│   ├── data/
+│   ├── results/
+│   ├── writing/
+│   ├── figures/
+│   ├── artifacts/
+│   ├── notes/
+│   └── reviews/
+└── logs.txt
+```
+
+Recommended `run_id` format:
+
+```text
+YYYYMMDD_HHMMSS
+```
+
+### Top-Level Boundaries
+
+- `user_input.txt`
+  - stores only the original user request for this run
+- `memory.md`
+  - stores only approved cross-stage context
+  - never failed attempts, revision history, or raw logs
+- `logs_raw.jsonl`
+  - stores the raw Claude `stream-json` event stream for debugging and replay
+- `stages/`
+  - stores stage summary markdown files
+  - is the canonical source of stage output
+  - is not a scratch directory
+- `workspace/`
+  - stores substantive research artifacts
+  - is not the workflow control plane
+- `logs.txt`
+  - stores audit and debug information
+  - is not approved memory or user-facing stage output
+
+### Workspace Boundaries
+
+- `workspace/literature/`
+  - papers, reading notes, citations, survey material
+- `workspace/code/`
+  - scripts, notebooks, implementations, runnable logic
+- `workspace/data/`
+  - raw data references, processed data, metadata, loaders
+- `workspace/results/`
+  - metrics, evaluations, tables, experiment outputs
+- `workspace/writing/`
+  - outlines, abstracts, drafts, dissemination text
+- `workspace/figures/`
+  - plots, diagrams, charts, visual assets
+- `workspace/artifacts/`
+  - packaged deliverables, reproducibility bundles, export-ready outputs
+- `workspace/notes/`
+  - temporary notes, TODOs, open questions, scratch thinking
+- `workspace/reviews/`
+  - critique notes, revision checklists, response drafts
+
+## Stage Model
+
+### Fixed Stage Order
 
 ```text
 01_literature_survey
@@ -51,118 +168,34 @@ python main.py
 08_dissemination
 ```
 
-## 仓库结构
+### Simple Inter-Stage Contract
 
-```text
-repo/
-├── main.py
-├── stages/
-│   ├── 01_literature_survey.md
-│   ├── 02_hypothesis_generation.md
-│   ├── 03_study_design.md
-│   ├── 04_implementation.md
-│   ├── 05_experimentation.md
-│   ├── 06_analysis.md
-│   ├── 07_writing.md
-│   └── 08_dissemination.md
-└── runs/
-```
+Each stage consumes:
 
-## 运行时目录结构
+- the current prompt template from `src/prompts/<stage>.md`
+- the original research request from `runs/<run_id>/user_input.txt`
+- approved context from `runs/<run_id>/memory.md`
+- the current contents of `runs/<run_id>/workspace/`
+- optional revision feedback for the current rerun
 
-每次执行都创建一个独立的运行目录：
+Each stage produces:
 
-```text
-runs/<run_id>/
-├── user_input.txt
-├── memory.md
-├── stages/
-│   ├── 01_literature_survey.md
-│   ├── ...
-├── workspace/
-│   ├── literature/
-│   ├── code/
-│   ├── data/
-│   └── results/
-└── logs.txt
-```
+- a required summary file at `runs/<run_id>/stages/<stage>.md`
+- any working artifacts inside `runs/<run_id>/workspace/`
 
-建议的 `run_id` 格式：
+That is the contract. Stages should not depend on custom per-stage JSON schemas or complex structured message formats.
 
-```text
-YYYYMMDD_HHMMSS
-```
+### Required Stage Output Format
 
-## 端到端流程
-
-1. 用户执行 `python main.py`。
-2. 当前版本先从终端读取研究需求。
-3. 程序创建新的运行目录 `runs/<run_id>/`。
-4. 程序将用户原始输入写入 `runs/<run_id>/user_input.txt`。
-5. 程序初始化以下文件和目录：
-   - `memory.md`
-   - `stages/`
-   - `workspace/literature/`
-   - `workspace/code/`
-   - `workspace/data/`
-   - `workspace/results/`
-   - `logs.txt`
-6. 程序从 Stage 1 到 Stage 8 顺序循环：
-   - 读取当前阶段模板 `stages/<stage>.md`
-   - 读取 `user_input.txt`
-   - 读取 `memory.md`
-   - 如果当前是 revise 重跑，额外附加反馈指令
-   - 组装最终 prompt
-   - 调用一次 Claude CLI
-   - 要求 Claude 产出 `runs/<run_id>/stages/<stage>.md`
-   - 读取并展示该 markdown，当前版本先打印到终端
-   - 等待用户输入操作，当前版本先通过终端完成
-   - 根据操作决定重跑、推进或终止
-7. 程序仅在以下两种条件下退出：
-   - Stage 8 被批准
-   - 用户选择 abort
-
-## Prompt 构造规则
-
-每次阶段尝试都按以下顺序拼接最终 prompt：
-
-1. 当前阶段模板：`stages/<stage>.md`
-2. 用户原始需求：`runs/<run_id>/user_input.txt`
-3. 已批准阶段摘要：`runs/<run_id>/memory.md`
-4. revise 反馈：仅当当前阶段为重跑时附加
-
-建议在 prompt 中显式分段，至少区分以下内容：
-
-- 当前阶段说明
-- 用户原始目标
-- 已批准上下文
-- 当前 revise 指令
-
-这样可以降低 Claude 混淆上下文的概率，也方便记录日志和排查问题。
-
-## Claude 调用约定
-
-每次阶段尝试统一通过以下命令调用：
-
-```bash
-claude --dangerously-skip-permissions -p "<PROMPT>"
-```
-
-必须在 prompt 中明确要求 Claude 遵守以下规则：
-
-- 所有实际操作都必须发生在 `runs/<run_id>/workspace/` 下。
-- 当前阶段的总结文件必须写入 `runs/<run_id>/stages/<stage>.md`。
-- 阶段总结必须严格遵守下文规定的 markdown 结构。
-- Claude 不负责控制阶段推进、重试或审批。
-
-## 阶段输出 Markdown 结构
-
-每个阶段都必须生成如下结构的 markdown：
+Every stage must generate markdown in the following structure:
 
 ```md
 # Stage X: <name>
 
 ## Objective
+...
+
+## Previously Approved Stage Summaries
 ...
 
 ## What I Did
@@ -188,105 +221,150 @@ claude --dangerously-skip-permissions -p "<PROMPT>"
 6. Abort
 ```
 
-程序应把 `runs/<run_id>/stages/<stage>.md` 视为阶段输出的唯一可信来源，并展示到当前交互界面。MVP 阶段先直接打印到终端。
+The `Previously Approved Stage Summaries` section should be a concise readable summary of the relevant approved context from `memory.md`, not a raw dump.
 
-## 当前交互逻辑（终端版）
+## Execution
 
-打印阶段 markdown 后，当前版本在终端提示：
+### Entry Point
+
+```bash
+python main.py
+```
+
+### End-to-End Flow
+
+1. `main.py` reads the user goal and starts the manager.
+2. The manager creates `runs/<run_id>/` and initializes the run files and workspace directories.
+3. The manager enters the fixed 8-stage loop.
+4. For each stage attempt, the manager:
+   - loads the stage template
+   - loads `user_input.txt`
+   - loads `memory.md`
+   - appends revision feedback if this is a rerun
+   - builds the final prompt
+5. The manager passes the prompt and run context to the operator.
+6. The operator invokes Claude exactly once, captures both parsed output and raw `stream-json`, and checks that `runs/<run_id>/stages/<stage>.md` exists.
+7. The manager displays the stage markdown and waits for user choice.
+8. The manager reruns the same stage, advances, or aborts.
+9. The program exits only when Stage 8 is approved or the user explicitly aborts.
+
+### Prompt Construction
+
+For every stage attempt, the final prompt is assembled in this order:
+
+1. current stage template from `src/prompts/<stage>.md`
+2. original user request from `runs/<run_id>/user_input.txt`
+3. approved context from `runs/<run_id>/memory.md`
+4. revision feedback, only when rerunning the current stage
+
+Prompt assembly should stay simple. Use a small number of clearly delimited text sections, not a complex inter-stage exchange format.
+
+### Claude Invocation Contract
+
+Each stage attempt must use this CLI form:
+
+```bash
+claude --dangerously-skip-permissions -p "<PROMPT>" --output-format stream-json --verbose
+```
+
+Claude must be instructed to follow these rules:
+
+- all work must happen inside `runs/<run_id>/workspace/`
+- the stage summary file must be written to `runs/<run_id>/stages/<stage>.md`
+- the summary must follow the required markdown structure exactly
+- the summary must include the previously approved stage summaries in readable form
+- Claude must not control stage transitions, approvals, retries, or abort behavior
+
+Operator rules:
+
+- call the Claude CLI directly
+- parse `stream-json` directly enough to extract useful execution information
+- avoid unnecessary abstraction layers around the CLI call
+- persist the raw `stream-json` stream to `runs/<run_id>/logs_raw.jsonl`
+
+Suggested minimal operator result:
+
+- `success`
+- `exit_code`
+- `stdout`
+- `stderr`
+- `stage_file_path`
+
+### Human Review Loop
+
+After the stage markdown is displayed, the current terminal version prompts:
 
 ```text
 Enter your choice:
 >
 ```
 
-支持的输入及行为如下：
+Supported inputs:
 
-- `1`、`2`、`3`
-  - 读取 `Suggestions for Refinement` 中对应编号的建议
-  - 将该建议作为附加反馈
-  - 完整重跑当前阶段
+- `1`, `2`, `3`
+  - use the corresponding refinement suggestion
+  - fully rerun the current stage
 - `4`
-  - 提示用户输入自定义反馈
-  - 将反馈作为 revise 指令
-  - 完整重跑当前阶段
+  - collect custom user feedback
+  - fully rerun the current stage
 - `5`
-  - 将当前阶段标记为已批准
-  - 把当前阶段摘要写入 `memory.md`
-  - 进入下一阶段
+  - approve the current stage
+  - append the approved stage summary to `memory.md`
+  - move to the next stage
 - `6`
-  - 立即终止当前运行
+  - abort the run immediately
 
-额外约束：
+Additional rules:
 
-- 阶段执行完成后，程序绝不能自动推进。
-- 只有输入 `5` 才允许进入下一阶段。
-- `1` 到 `4` 都必须重跑同一个阶段。
-- 未批准的尝试结果不得写入 `memory.md`。
+- the workflow must never auto-advance
+- `5` is the only action that may advance to the next stage
+- `1` through `4` always rerun the same stage
+- unapproved attempts must not be written into `memory.md`
 
-## `memory.md` 规则
+## State Rules
 
-`memory.md` 只保存稳定且被批准的上下文：
+- `memory.md`
+  - stores only the original user goal and approved stage summaries
+- `logs.txt`
+  - stores execution and interaction traces only
+- `logs_raw.jsonl`
+  - stores raw Claude event output only
+- these layers must stay distinct:
+  - `memory.md` = approved context
+  - `stages/<stage>.md` = user-facing stage output
+  - `workspace/` = research artifacts
+  - `logs.txt` = audit and debug
+  - `logs_raw.jsonl` = raw Claude stream output
 
-- 用户初始目标
-- 每个已批准阶段的摘要
+## MVP v0.1
 
-`memory.md` 不允许包含：
+### Included
 
-- 中间失败尝试
-- 被拒绝的 revise 结果
-- revise 历史
-- 未批准阶段输出
+- 8 fixed stages
+- one Claude invocation per stage attempt
+- mandatory human approval after every stage
+- AI refine, custom refine, approve, and abort
+- isolated run directories under `runs/<run_id>/`
+- multi-file Python structure with `manager.py`, `operator.py`, `utils.py`, and `src/prompts/`
+- direct-control-flow manager implementation
+- thin operator result model
+- raw `stream-json` persistence for debugging
+- support for a fake operator mode to validate the workflow before wiring real Claude execution
 
-换句话说，`memory.md` 是“已确认状态”的压缩记忆，不是完整运行日志。
+### Out of Scope
 
-## 日志要求
+- multi-agent execution
+- automatic evaluation
+- web UI
+- database
+- concurrent execution
 
-`logs.txt` 应记录最小但足够排查问题的审计信息，每次阶段尝试至少追加：
+### Acceptance Criteria
 
-- 时间戳
-- 阶段名称
-- 当前是首次尝试还是 revise
-- 本次发送给 Claude 的 prompt
-- Claude 的 stdout 或错误结果
-- 阶段结束后用户的选择
-
-`logs.txt` 用于调试和回放，不替代 `memory.md`。
-
-## 关键约束
-
-- 每个阶段都必须产出 markdown 总结文件。
-- 所有生成文件都必须留在当前 run 目录内。
-- 工作流必须是单线程、顺序执行。
-- Claude 的上下文只来自每次调用时传入的 prompt。
-- 一个阶段只有在用户明确批准后，才算真正完成。
-
-## MVP 范围
-
-本阶段必须实现：
-
-- run 目录创建
-- 阶段循环
-- Claude 调用
-- markdown 生成与当前交互界面展示
-- `1` 到 `6` 的当前终端交互
-- 已批准内容写入 `memory.md`
-
-本阶段暂不实现：
-
-- 多 agent
-- 自动评估
-- Web UI
-- 数据库
-- 并发执行
-
-## 验收标准
-
-当以下条件全部满足时，MVP 可视为完成：
-
-- 执行 `python main.py` 后能启动当前版本的终端交互流程。
-- 每次运行都会在 `runs/` 下创建独立目录。
-- 每次阶段尝试都恰好触发一次 Claude CLI 调用。
-- 每个阶段结束后都能打印符合规范的 markdown 总结。
-- 用户可以在批准前多次 refine 当前阶段。
-- 只有已批准阶段的摘要会进入 `memory.md`。
-- 流程只会在 Stage 8 被批准或用户主动 abort 时结束。
+- `python main.py` starts the current terminal-based workflow
+- each run creates a separate directory under `runs/`
+- each stage attempt triggers exactly one Claude CLI invocation
+- every stage produces a valid markdown summary with the required sections
+- the user can refine the same stage multiple times before approval
+- only approved stage summaries are persisted into `memory.md`
+- the run ends only when Stage 8 is approved or the user explicitly aborts
