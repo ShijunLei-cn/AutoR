@@ -19,13 +19,14 @@ AutoR uses a fixed stage order:
 
 Core constraints:
 
-- One Claude invocation per stage attempt.
+- One primary Claude invocation per stage attempt. Repair and fallback invocations are operator-managed.
 - Every stage writes a draft summary to `stages/<stage>.tmp.md`.
 - AutoR validates the draft, then promotes it to `stages/<stage>.md`.
 - Human approval is mandatory after every validated stage.
 - Each stage keeps its own Claude conversation state.
 - `1/2/3/4` continue the current stage conversation with refinement feedback. Only `5` advances. `6` aborts.
 - Approved stage summaries are appended to `memory.md`.
+- `main.py` defaults to `--model sonnet`, but the model can be overridden per run.
 
 The main code lives in:
 
@@ -83,6 +84,14 @@ Directory boundaries:
 - `notes/`: temporary notes and setup material.
 - `reviews/`: critique notes, threat-to-validity notes, and readiness reviews.
 
+Other run state:
+
+- `memory.md`: approved cross-stage memory only.
+- `prompt_cache/`: exact prompts used for stage attempts and repairs.
+- `operator_state/`: per-stage Claude session IDs.
+- `stages/`: draft and promoted stage summaries.
+- `logs.txt` and `logs_raw.jsonl`: workflow logs and raw Claude stream output.
+
 ## Workflow
 
 ```mermaid
@@ -133,8 +142,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[Build prompt from template + goal + memory + optional feedback] --> B[Run Claude Code once]
-    B --> C[Write draft stage summary]
+    A[Build prompt from template + goal + memory + optional feedback] --> B[Start or resume stage session]
+    B --> C[Claude writes draft stage summary]
     C --> D[Validate markdown and required artifacts]
     D --> E{Valid?}
     E -- No --> F[Repair, normalize, or rerun current stage]
@@ -154,8 +163,9 @@ Stage-loop rules:
 
 - Claude never writes directly to the final stage file.
 - The final stage file exists only after validation succeeds.
-- The first attempt of a stage starts a fresh Claude session; later refinements continue that same stage session.
-- If validation still fails after repair and normalization, AutoR keeps working inside the same stage and can fall back to a fresh session only if resume fails.
+- The first attempt of a stage starts a fresh Claude session.
+- Later refinements reuse the same stage session whenever possible.
+- If validation still fails after repair and normalization, AutoR keeps working inside the same stage and falls back to a fresh session only if resume fails.
 - The stage loop is controlled by AutoR, not by Claude.
 
 ## Prompt and Execution
@@ -170,7 +180,9 @@ For each stage attempt, AutoR assembles a prompt from:
 6. optional refinement feedback
 7. for continuation attempts, the current stage draft/final files and existing workspace state
 
-AutoR writes the assembled prompt to `runs/<run_id>/prompt_cache/`, stores per-stage session IDs in `runs/<run_id>/operator_state/`, and invokes Claude in streaming mode through [src/operator.py](src/operator.py):
+AutoR writes the assembled prompt to `runs/<run_id>/prompt_cache/`, stores per-stage session IDs in `runs/<run_id>/operator_state/`, and invokes Claude in streaming mode through [src/operator.py](src/operator.py).
+
+First attempt for a stage:
 
 ```bash
 claude --model <model> \
@@ -182,7 +194,19 @@ claude --model <model> \
   --verbose
 ```
 
-Refinement attempts on the same stage reuse the same `stage_session_id` and call Claude with `--resume <stage_session_id>` instead of opening a new stage conversation.
+Continuation attempt for the same stage:
+
+```bash
+claude --model <model> \
+  --permission-mode bypassPermissions \
+  --dangerously-skip-permissions \
+  --resume <stage_session_id> \
+  -p @runs/<run_id>/prompt_cache/<stage>_attempt_<nn>.prompt.md \
+  --output-format stream-json \
+  --verbose
+```
+
+Refinement attempts reuse the same `stage_session_id` instead of opening a new stage conversation.
 
 The streamed Claude output is shown live in the terminal and also captured in `logs_raw.jsonl`.
 
@@ -241,6 +265,18 @@ Run fake mode:
 python main.py --fake-operator --goal "Smoke test"
 ```
 
+Run with the default model explicitly:
+
+```bash
+python main.py --model sonnet
+```
+
+Run with a different Claude model alias:
+
+```bash
+python main.py --model opus
+```
+
 Resume the latest run:
 
 ```bash
@@ -268,7 +304,7 @@ Valid stage identifiers include `03`, `3`, and `03_study_design`.
 Included:
 
 - fixed 8-stage workflow
-- one Claude invocation per stage attempt
+- one primary Claude invocation per stage attempt
 - mandatory human approval after every stage
 - stage-local Claude conversation continuation within a stage
 - AI refine, custom refine, approve, and abort
