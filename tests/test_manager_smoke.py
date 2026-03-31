@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.manager import ResearchManager
+from src.manifest import load_run_manifest
 from src.utils import (
     DEFAULT_REFINEMENT_SUGGESTIONS,
     STAGES,
@@ -21,6 +22,8 @@ from src.utils import (
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+STAGE_01 = next(stage for stage in STAGES if stage.slug == "01_literature_survey")
+STAGE_05 = next(stage for stage in STAGES if stage.slug == "05_experimentation")
 STAGE_06 = next(stage for stage in STAGES if stage.slug == "06_analysis")
 
 
@@ -28,6 +31,7 @@ class ScriptedSmokeOperator:
     def __init__(self) -> None:
         self.model = "smoke-test-model"
         self.invocations: dict[str, int] = {}
+        self.continue_modes: dict[str, list[bool]] = {}
 
     def run_stage(
         self,
@@ -39,6 +43,7 @@ class ScriptedSmokeOperator:
     ) -> OperatorResult:
         invocation = self.invocations.get(stage.slug, 0) + 1
         self.invocations[stage.slug] = invocation
+        self.continue_modes.setdefault(stage.slug, []).append(continue_session)
         produced = self._materialize_artifacts(stage, paths, invocation)
         stage_file = paths.stage_tmp_file(stage)
         write_text(
@@ -193,16 +198,20 @@ class ManagerSmokeTests(unittest.TestCase):
     def _run_roots(self, runs_dir: Path) -> list[Path]:
         return sorted(path for path in runs_dir.iterdir() if path.is_dir())
 
+    def _build_manager(self, tmp_dir: str) -> tuple[Path, ScriptedSmokeOperator, ResearchManager]:
+        runs_dir = Path(tmp_dir) / "runs"
+        operator = ScriptedSmokeOperator()
+        manager = ResearchManager(
+            project_root=REPO_ROOT,
+            runs_dir=runs_dir,
+            operator=operator,
+            output_stream=io.StringIO(),
+        )
+        return runs_dir, operator, manager
+
     def test_manager_run_completes_full_eight_stage_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            runs_dir = Path(tmp_dir) / "runs"
-            operator = ScriptedSmokeOperator()
-            manager = ResearchManager(
-                project_root=REPO_ROOT,
-                runs_dir=runs_dir,
-                operator=operator,
-                output_stream=io.StringIO(),
-            )
+            runs_dir, operator, manager = self._build_manager(tmp_dir)
 
             with patch.object(manager, "_ask_choice", return_value="5"):
                 success = manager.run("Smoke-test the end-to-end AutoR flow.", venue="neurips_2025")
@@ -217,14 +226,7 @@ class ManagerSmokeTests(unittest.TestCase):
 
     def test_resume_run_from_redo_stage_reruns_downstream_stages(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            runs_dir = Path(tmp_dir) / "runs"
-            operator = ScriptedSmokeOperator()
-            manager = ResearchManager(
-                project_root=REPO_ROOT,
-                runs_dir=runs_dir,
-                operator=operator,
-                output_stream=io.StringIO(),
-            )
+            runs_dir, operator, manager = self._build_manager(tmp_dir)
 
             with patch.object(manager, "_ask_choice", return_value="5"):
                 self.assertTrue(manager.run("Smoke-test redo-stage handling.", venue="neurips_2025"))
@@ -241,6 +243,64 @@ class ManagerSmokeTests(unittest.TestCase):
             rerun_stage06 = read_text(paths.stage_file(STAGE_06))
             self.assertIn("Invocation marker: 2", rerun_stage06)
             self.assertIn("Invocation marker: 1", read_text(paths.stage_file(STAGES[4])))
+
+    def test_stage_refinement_reuses_same_stage_before_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _, operator, manager = self._build_manager(tmp_dir)
+            paths = manager._create_run("Smoke-test stage refinement handling.", venue="neurips_2025")
+
+            with patch.object(manager, "_ask_choice", side_effect=["1", "5"]):
+                approved = manager._run_stage(paths, STAGE_01)
+
+            self.assertTrue(approved)
+            self.assertEqual(operator.continue_modes[STAGE_01.slug], [False, True])
+            self.assertIn("Invocation marker: 2", read_text(paths.stage_file(STAGE_01)))
+
+            manifest = load_run_manifest(paths.run_manifest)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            entry = next(item for item in manifest.stages if item.slug == STAGE_01.slug)
+            self.assertTrue(entry.approved)
+            self.assertEqual(entry.attempt_count, 2)
+
+    def test_resume_run_with_rollback_reruns_invalidated_downstream_stages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir, operator, manager = self._build_manager(tmp_dir)
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                self.assertTrue(manager.run("Smoke-test rollback resume handling.", venue="neurips_2025"))
+
+            run_root = self._run_roots(runs_dir)[0]
+            paths = build_run_paths(run_root)
+            self.assertIn("Invocation marker: 1", read_text(paths.stage_file(STAGE_05)))
+            self.assertIn("Invocation marker: 1", read_text(paths.stage_file(STAGE_06)))
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                resumed = manager.resume_run(run_root, rollback_stage=STAGE_05, venue="neurips_2025")
+
+            self.assertTrue(resumed)
+            self.assertIn("Invocation marker: 2", read_text(paths.stage_file(STAGE_05)))
+            self.assertIn("Invocation marker: 2", read_text(paths.stage_file(STAGE_06)))
+            self.assertEqual(operator.invocations[STAGE_05.slug], 2)
+            self.assertEqual(operator.invocations[STAGE_06.slug], 2)
+            self.assertIn("Invocation marker: 1", read_text(paths.stage_file(STAGES[3])))
+
+    def test_manager_abort_marks_run_cancelled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir, _, manager = self._build_manager(tmp_dir)
+
+            with patch.object(manager, "_ask_choice", return_value="6"):
+                success = manager.run("Smoke-test abort handling.", venue="neurips_2025")
+
+            self.assertFalse(success)
+            run_root = self._run_roots(runs_dir)[0]
+            paths = build_run_paths(run_root)
+            manifest = load_run_manifest(paths.run_manifest)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            self.assertEqual(manifest.run_status, "cancelled")
+            self.assertEqual(manifest.current_stage_slug, STAGE_01.slug)
+            self.assertIsNone(manifest.completed_at)
 
 
 if __name__ == "__main__":
