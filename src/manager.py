@@ -13,6 +13,7 @@ from .utils import (
     RunPaths,
     StageSpec,
     append_approved_stage_summary,
+    approved_stage_numbers,
     append_log_entry,
     build_continuation_prompt,
     build_prompt,
@@ -23,9 +24,11 @@ from .utils import (
     ensure_run_layout,
     format_stage_template,
     format_venue_for_prompt,
+    filtered_approved_memory,
     initialize_memory,
     initialize_run_config,
     load_prompt_template,
+    mark_stage_execution_started,
     parse_refinement_suggestions,
     read_text,
     truncate_text,
@@ -50,6 +53,7 @@ class ResearchManager:
         self.prompt_dir = self.project_root / "src" / "prompts"
         self.output_stream = output_stream
         self.ui = ui or TerminalUI(output_stream=output_stream)
+        self._redo_start_stage: StageSpec | None = None
 
     def run(self, user_goal: str, venue: str | None = None) -> bool:
         paths = self._create_run(user_goal, venue=venue)
@@ -88,22 +92,27 @@ class ResearchManager:
         return self._run_from_paths(paths, start_stage=start_stage)
 
     def _run_from_paths(self, paths: RunPaths, start_stage: StageSpec | None = None) -> bool:
-        stages_to_run = self._select_stages_for_run(paths, start_stage)
+        previous_redo_start = self._redo_start_stage
+        self._redo_start_stage = start_stage
+        try:
+            stages_to_run = self._select_stages_for_run(paths, start_stage)
 
-        for stage in stages_to_run:
-            approved = self._run_stage(paths, stage)
-            if not approved:
-                append_log_entry(
-                    paths.logs,
-                    "run_aborted",
-                    f"Run aborted during {stage.stage_title}.",
-                )
-                self.ui.show_status("Run aborted.", level="warn")
-                return False
+            for stage in stages_to_run:
+                approved = self._run_stage(paths, stage)
+                if not approved:
+                    append_log_entry(
+                        paths.logs,
+                        "run_aborted",
+                        f"Run aborted during {stage.stage_title}.",
+                    )
+                    self.ui.show_status("Run aborted.", level="warn")
+                    return False
 
-        append_log_entry(paths.logs, "run_complete", "All stages approved.")
-        self.ui.show_status("All stages approved. Run complete.", level="success")
-        return True
+            append_log_entry(paths.logs, "run_complete", "All stages approved.")
+            self.ui.show_status("All stages approved. Run complete.", level="success")
+            return True
+        finally:
+            self._redo_start_stage = previous_redo_start
 
     def _create_run(self, user_goal: str, venue: str | None = None) -> RunPaths:
         run_root = create_run_root(self.runs_dir)
@@ -129,10 +138,11 @@ class ResearchManager:
             return [stage for stage in STAGES if stage.number >= start_stage.number]
 
         approved_memory = read_text(paths.memory)
+        approved_stage_ids = approved_stage_numbers(approved_memory)
         pending: list[StageSpec] = []
         for stage in STAGES:
             final_stage_path = paths.stage_file(stage)
-            if final_stage_path.exists() and stage.stage_title in approved_memory:
+            if final_stage_path.exists() and stage.number in approved_stage_ids:
                 continue
             pending.append(stage)
 
@@ -142,6 +152,7 @@ class ResearchManager:
         attempt_no = 1
         revision_feedback: str | None = None
         continue_session = False
+        mark_stage_execution_started(paths, stage)
 
         while True:
             self.ui.show_stage_start(stage.stage_title, attempt_no, continue_session)
@@ -220,7 +231,7 @@ class ResearchManager:
                 )
 
             stage_markdown = read_text(result.stage_file_path)
-            validation_errors = validate_stage_markdown(stage_markdown) + validate_stage_artifacts(stage, paths)
+            validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
             if validation_errors:
                 self.ui.show_status(
                     f"Stage summary for {stage.stage_title} was incomplete. Running repair attempt...",
@@ -267,7 +278,7 @@ class ResearchManager:
                     )
 
                 stage_markdown = read_text(repair_result.stage_file_path)
-                validation_errors = validate_stage_markdown(stage_markdown) + validate_stage_artifacts(stage, paths)
+                validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                 if validation_errors:
                     self.ui.show_status(
                         f"Repair output for {stage.stage_title} is still incomplete. Normalizing locally...",
@@ -295,7 +306,7 @@ class ResearchManager:
                     )
 
                     stage_markdown = read_text(repair_result.stage_file_path)
-                    validation_errors = validate_stage_markdown(stage_markdown) + validate_stage_artifacts(stage, paths)
+                    validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                     if validation_errors:
                         append_log_entry(
                             paths.logs,
@@ -319,18 +330,7 @@ class ResearchManager:
 
                 result = repair_result
 
-            final_stage_path = paths.stage_file(stage)
-            shutil.copyfile(result.stage_file_path, final_stage_path)
-            append_log_entry(
-                paths.logs,
-                f"{stage.slug} attempt {attempt_no} promoted",
-                (
-                    "Promoted validated stage summary draft to final stage file.\n"
-                    f"draft: {result.stage_file_path}\n"
-                    f"final: {final_stage_path}"
-                ),
-            )
-            stage_markdown = read_text(final_stage_path)
+            stage_markdown = read_text(result.stage_file_path)
 
             suggestions = parse_refinement_suggestions(stage_markdown)
             self._display_stage_output(stage, stage_markdown)
@@ -370,6 +370,17 @@ class ResearchManager:
                 continue
 
             if choice == "5":
+                final_stage_path = paths.stage_file(stage)
+                shutil.copyfile(result.stage_file_path, final_stage_path)
+                append_log_entry(
+                    paths.logs,
+                    f"{stage.slug} attempt {attempt_no} promoted",
+                    (
+                        "Promoted validated stage summary draft to final stage file after approval.\n"
+                        f"draft: {result.stage_file_path}\n"
+                        f"final: {final_stage_path}"
+                    ),
+                )
                 append_approved_stage_summary(paths.memory, stage, stage_markdown)
                 append_log_entry(
                     paths.logs,
@@ -405,11 +416,13 @@ class ResearchManager:
                 + format_manifest_for_prompt(manifest)
                 + "\n"
             )
+        approved_memory = read_text(paths.memory)
+        if self._redo_start_stage is not None and stage.number >= self._redo_start_stage.number:
+            approved_memory = filtered_approved_memory(approved_memory, max_stage_number=stage.number - 1)
         if continue_session:
-            return build_continuation_prompt(stage, stage_template, paths, revision_feedback)
+            return build_continuation_prompt(stage, stage_template, paths, approved_memory, revision_feedback)
 
         user_request = read_text(paths.user_input)
-        approved_memory = read_text(paths.memory)
         return build_prompt(stage, stage_template, user_request, approved_memory, revision_feedback)
 
     def _display_stage_output(self, stage: StageSpec, markdown: str) -> None:

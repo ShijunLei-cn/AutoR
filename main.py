@@ -133,8 +133,7 @@ def main() -> int:
             operator=operator,
             ui=ui,
         )
-        manager.resume_run(run_root, start_stage=start_stage, venue=venue)
-        return 0
+        return 0 if manager.resume_run(run_root, start_stage=start_stage, venue=venue) else 1
 
     model = args.model or "sonnet"
     venue = resolve_venue_key(args.venue or DEFAULT_VENUE)
@@ -146,8 +145,7 @@ def main() -> int:
         ui=ui,
     )
     goal = args.goal.strip() if args.goal else read_user_goal()
-    manager.run(goal, venue=venue)
-    return 0
+    return 0 if manager.run(goal, venue=venue) else 1
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -415,7 +416,8 @@ Original stderr:
     ) -> OperatorResult:
         session_id = self._resolve_stage_session_id(paths, stage, continue_session=continue_session)
         self._persist_stage_session_id(paths, stage, session_id)
-        previous_summaries = approved_stage_summaries(read_text(paths.memory))
+        approved_memory = self._extract_approved_memory_from_prompt(prompt) or read_text(paths.memory)
+        previous_summaries = approved_stage_summaries(approved_memory)
         note_path = paths.notes_dir / f"{stage.slug}_fake_operator_note.md"
         stage_tmp_path = paths.stage_tmp_file(stage)
         user_goal = read_text(paths.user_input).strip()
@@ -534,6 +536,17 @@ Original stderr:
             stage_file_path=stage_tmp_path,
             session_id=session_id,
         )
+
+    def _extract_approved_memory_from_prompt(self, prompt: str) -> str | None:
+        match = re.search(
+            r"^# Approved Memory\s*$\n?(.*?)(?=^# [^\n]+\s*$|\Z)",
+            prompt,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        if not match:
+            return None
+        extracted = match.group(1).strip()
+        return extracted or None
 
     def _resolve_stage_session_id(
         self,

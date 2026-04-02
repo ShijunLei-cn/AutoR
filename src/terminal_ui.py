@@ -4,9 +4,7 @@ import json
 import os
 import shutil
 import sys
-import termios
 import textwrap
-import tty
 from typing import Any, TextIO
 
 
@@ -122,7 +120,7 @@ class TerminalUI:
         if not self._interactive_input_available():
             while True:
                 self.panel("Choose Next Action", options, color=self.FG_MAGENTA)
-                choice = input("Enter your choice:\n> ").strip()
+                choice = self._read_line("Enter your choice:\n> ").strip()
                 if choice in {"1", "2", "3", "4", "5", "6"}:
                     return choice
                 self.show_status("Invalid choice. Enter one of: 1, 2, 3, 4, 5, 6.", level="warn")
@@ -165,7 +163,7 @@ class TerminalUI:
         lines: list[str] = []
         while True:
             prompt = self._style("> ", self.BOLD, self.FG_MAGENTA) if not lines else ""
-            line = input(prompt)
+            line = self._read_line(prompt)
             if not line.strip():
                 if lines:
                     break
@@ -437,10 +435,28 @@ class TerminalUI:
                 paragraph,
                 width=width,
                 break_long_words=False,
+                break_on_hyphens=False,
                 replace_whitespace=False,
                 drop_whitespace=False,
             )
-            lines.extend(wrapped or [""])
+            if not wrapped:
+                lines.append("")
+                continue
+            for segment in wrapped:
+                if len(segment) <= width:
+                    lines.append(segment)
+                    continue
+                lines.extend(
+                    textwrap.wrap(
+                        segment,
+                        width=width,
+                        break_long_words=True,
+                        break_on_hyphens=False,
+                        replace_whitespace=False,
+                        drop_whitespace=False,
+                    )
+                    or [""]
+                )
         return lines
 
     def _truncate_text_block(self, text: str, max_chars: int) -> list[str]:
@@ -465,7 +481,15 @@ class TerminalUI:
 
     def _width(self) -> int:
         columns = shutil.get_terminal_size((100, 20)).columns
-        return min(max(columns, 72), 118)
+        return min(max(columns, 20), 118)
+
+    def _read_line(self, prompt: str = "") -> str:
+        if prompt:
+            self._write(prompt)
+        line = self.input_stream.readline()
+        if line == "":
+            raise EOFError("No input available.")
+        return line.rstrip("\r\n")
 
     def _write(self, text: str) -> None:
         self.output_stream.write(text)
@@ -481,8 +505,15 @@ class TerminalUI:
         return hasattr(self.input_stream, "isatty") and self.input_stream.isatty()
 
     def _read_key(self) -> str:
-        file_descriptor = self.input_stream.fileno()
-        old_settings = termios.tcgetattr(file_descriptor)
+        try:
+            import termios
+            import tty
+
+            file_descriptor = self.input_stream.fileno()
+            old_settings = termios.tcgetattr(file_descriptor)
+        except (ImportError, AttributeError, OSError):
+            line = self._read_line()
+            return "enter" if not line else line[0]
         try:
             tty.setraw(file_descriptor)
             first = self.input_stream.read(1)
