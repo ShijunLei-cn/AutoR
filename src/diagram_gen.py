@@ -67,34 +67,111 @@ def _resolve_api_key() -> str | None:
 # ---------------------------------------------------------------------------
 
 NEURIPS_STYLE_GUIDE = """\
-## NeurIPS 2025 Diagram Style Guide (Condensed)
+### 1. The "NeurIPS Look"
+The prevailing aesthetic for 2025 is **"Soft Tech & Scientific Pastels."**
+Gone are the days of harsh primary colors and sharp black boxes. The modern NeurIPS diagram feels approachable yet precise. It utilizes high-value (light) backgrounds to organize complexity, reserving saturation for the most critical active elements. The vibe balances **clean modularity** (clear separation of parts) with **narrative flow** (clear left-to-right progression).
 
-### Aesthetic: "Soft Tech & Scientific Pastels"
-- Use very light, desaturated pastel backgrounds (opacity 10-15%).
-  - Cream (#F5F5DC), Pale Blue (#E6F3FF), Mint (#E0F2F1), Lavender (#F3E5F5).
-- Reserve saturated color for active/highlight elements.
-- Trainable elements → warm tones (red, orange); Frozen → cool tones (grey, ice blue).
+---
 
-### Shapes
-- Process nodes: Rounded rectangles (radius 5-10px). Dominant shape (~80%).
-- Tensors/data: 3D cuboids for volume, flat grids for matrices, cylinders for memory.
-- Dashed borders for logical stages or optional paths.
+### 2. Detailed Style Options
 
-### Lines & Arrows
-- Orthogonal/elbow for architecture flow; curved for high-level logic.
-- Solid for data flow; dashed for auxiliary (gradients, skip connections).
-- Place math operators (⊕, ⊗) directly on lines.
+#### **A. Color Palettes**
+*Design Philosophy: Use color to group logic, not just to decorate. Avoid fully saturated backgrounds.*
 
-### Typography
-- Labels: Sans-serif (Arial, Roboto). Bold for headers.
-- Math variables: Serif, italicised.
+**Background Fills (The "Zone" Strategy)**
+*Used to encapsulate stages (e.g., "Pre-training phase") or environments.*
+*   **Most papers use:** Very light, desaturated pastels (Opacity ~10–15%).
+*   **Aesthetically pleasing options include:**
+    *   🍦 **Cream / Beige** (e.g., `#F5F5DC`) – *Warm, academic feel.*
+    *   ☁️ **Pale Blue / Ice** (e.g., `#E6F3FF`) – *Clean, technical feel.*
+    *   🌿 **Mint / Sage** (e.g., `#E0F2F1`) – *Soft, organic feel.*
+    *   🌸 **Pale Lavender** (e.g., `#F3E5F5`) – *distinctive, modern feel.*
+*   **Alternative (~20%):** White backgrounds with colored *dashed borders* for a high-contrast, minimalist look (common in theoretical papers).
 
-### Icons
-- Trainable: fire/lightning. Frozen: snowflake/padlock.
-- Text: document/chat bubble. Image: actual thumbnail.
+**Functional Element Colors**
+*   **For "Active" Modules (Encoders, MLP, Attention):** Medium saturation is preferred.
+    *   *Common pairings:* Blue/Orange, Green/Purple, or Teal/Pink.
+    *   *Observation:* Colors are often used to distinguish **status** rather than component type:
+        *   **Trainable Elements:** Often Warm tones (Red, Orange, Deep Pink).
+        *   **Frozen/Static Elements:** Often Cool tones (Grey, Ice Blue, Cyan).
+*   **For Highlights/Results:** High saturation (Primary Red, Bright Gold) is strictly reserved for "Error/Loss," "Ground Truth," or the final output.
 
-### Avoid
-- PowerPoint defaults, font mixing, inconsistent 2D/3D, saturated backgrounds.
+#### **B. Shapes & Containers**
+*Design Philosophy: "Softened Geometry." Sharp corners are for data; rounded corners are for processes.*
+
+**Core Components**
+*   **Process Nodes (The Standard):** Rounded Rectangles (Corner radius 5–10px). This is the dominant shape (~80%) for generic layers or steps.
+*   **Tensors & Data:**
+    *   **3D Stacks/Cuboids:** Used to imply depth/volume (e.g., $B \times H \times W$).
+    *   **Flat Squares/Grids:** Used for matrices, tokens, or attention maps.
+    *   **Cylinders:** Exclusively reserved for Databases, Buffers, or Memory.
+
+**Grouping & Hierarchy**
+*   **The "Macro-Micro" Pattern:** A solid, light-colored container represents the global view, with a specific module (e.g., "Attention Block") connected via lines to a "zoomed-in" detailed breakout box.
+*   **Borders:**
+    *   **Solid:** For physical components.
+    *   **Dashed:** Highly prevalent for indicating "Logical Stages," "Optional Paths," or "Scopes."
+
+#### **C. Lines & Arrows**
+*Design Philosophy: Line style dictates flow type.*
+
+**Connector Styles**
+*   **Orthogonal / Elbow (Right Angles):** Most papers use this for **Network Architectures** (implies precision, matrices, and tensors).
+*   **Curved / Bezier:** Common choices include this for **System Logic, Feedback Loops, or High-Level Data Flow** (implies narrative and connection).
+
+**Line Semantics**
+*   **Solid Black/Grey:** Standard data flow (Forward pass).
+*   **Dashed Lines:** Universally recognized as "Auxiliary Flow."
+    *   *Used for:* Gradient updates, Skip connections, or Loss calculations.
+*   **Integrated Math:** Standard operators ($\oplus$ for Add, $\otimes$ for Concat/Multiply) are frequently placed *directly* on the line or intersection.
+
+#### **D. Typography & Icons**
+*Design Philosophy: Strict separation between "Labeling" and "Math."*
+
+**Typography**
+*   **Labels (Module Names):** **Sans-Serif** (Arial, Roboto, Helvetica).
+    *   *Style:* Bold for headers, Regular for details.
+*   **Variables (Math):** **Serif** (Times New Roman, LaTeX default).
+    *   *Rule:* If it is a variable in your equation (e.g., $x, \theta, \mathcal{L}$), it **must** be Serif and Italicized in the diagram.
+
+**Iconography Options**
+*   **For Model State:**
+    *   *Trainable:* 🔥 Fire, ⚡ Lightning.
+    *   *Frozen:* ❄️ Snowflake, 🔒 Padlock, 🛑 Stop Sign (Greyed out).
+*   **For Operations:**
+    *   *Inspection:* 🔍 Magnifying Glass.
+    *   *Processing/Computation:* ⚙️ Gear, 🖥️ Monitor.
+*   **For Content:**
+    *   *Text/Prompt:* 📄 Document, 💬 Chat Bubble.
+    *   *Image:* 🖼️ Actual thumbnail of an image (not just a square).
+
+---
+
+### 3. Common Pitfalls (How to look "Amateur")
+*   ❌ **The "PowerPoint Default" Look:** Using standard Blue/Orange presets with heavy black outlines.
+*   ❌ **Font Mixing:** Using Times New Roman for "Encoder" labels (makes the paper look dated to the 1990s).
+*   ❌ **Inconsistent Dimension:** Mixing flat 2D boxes and 3D isometric cubes without a clear reason (e.g., 2D for logic, 3D for tensors is fine; random mixing is not).
+*   ❌ **Primary Backgrounds:** Using saturated Yellow or Blue backgrounds for grouping (distracts from the content).
+*   ❌ **Ambiguous Arrows:** Using the same line style for "Data Flow" and "Gradient Flow."
+
+---
+
+### 4. Domain-Specific Styles
+
+**If you are writing an AGENT / LLM Paper:**
+*   **Vibe:** Illustrative, Narrative, "Friendly.", Cartoony.
+*   **Key Elements:** Use "User Interface" aesthetics. Chat bubbles for prompts, document icons for retrieval.
+*   **Characters:** It is common to use cute 2D vector robots, human avatars, or emojis to humanize the agent's reasoning steps.
+
+**If you are writing a COMPUTER VISION / 3D Paper:**
+*   **Vibe:** Spatial, Dense, Geometric.
+*   **Key Elements:** Frustums (camera cones), Ray lines, and Point Clouds.
+*   **Color:** Often uses RGB color coding to denote axes or channel correspondence. Use heatmaps (Rainbow/Viridis) to show activation.
+
+**If you are writing a THEORETICAL / OPTIMIZATION Paper:**
+*   **Vibe:** Minimalist, Abstract, "Textbook."
+*   **Key Elements:** Focus on graph nodes (circles) and manifolds (planes/surfaces).
+*   **Color:** Restrained. mostly Grayscale/Black/White with one highlight color (e.g., Gold or Blue). Avoid "cartoony" elements.
 """
 
 
@@ -453,8 +530,23 @@ def inject_diagram_into_latex(
 
     content = method_tex_path.read_text(encoding="utf-8")
 
-    # Don't insert twice
-    if "fig:method_overview" in content:
+    # Don't insert twice. Only treat the figure as "already present" if there is
+    # a non-comment occurrence of the label — comments like
+    # "% Figure~\ref{fig:method_overview} will be inserted ..." must not block
+    # injection.
+    def _has_real_label(text: str) -> bool:
+        for raw_line in text.splitlines():
+            stripped = raw_line.lstrip()
+            if stripped.startswith("%"):
+                continue
+            # Strip trailing inline comments (unescaped %)
+            code = re.sub(r"(?<!\\)%.*$", "", raw_line)
+            if "\\label{fig:method_overview}" in code:
+                return True
+        return False
+
+    import re
+    if _has_real_label(content):
         return False
 
     figure_block = METHOD_FIGURE_LATEX.format(
@@ -462,8 +554,20 @@ def inject_diagram_into_latex(
         caption=caption,
     ).strip()
 
-    # Insert after the first \section or at the top
-    import re
+    # Drop any stale comment lines or dangling \ref{fig:method_overview} the
+    # writing stage may have left behind so the new figure is the single source
+    # of truth for the label.
+    cleaned_lines: list[str] = []
+    for raw_line in content.splitlines():
+        stripped = raw_line.lstrip()
+        if stripped.startswith("%") and "fig:method_overview" in raw_line:
+            continue
+        if stripped.startswith("%") and "METHOD_DIAGRAM_PLACEHOLDER" in raw_line:
+            continue
+        cleaned_lines.append(raw_line)
+    content = "\n".join(cleaned_lines)
+
+    # Insert after the first \section (and optional \label) or at the top.
     section_match = re.search(r"(\\section\{[^}]*\}\s*(?:\\label\{[^}]*\}\s*)?)", content)
     if section_match:
         insert_pos = section_match.end()
