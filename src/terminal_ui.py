@@ -104,6 +104,10 @@ class TerminalUI:
             self._render_result_event(payload)
             return
 
+    def show_revision_delta(self, delta_text: str, attempt_no: int) -> None:
+        title = f"What Changed | Attempt {attempt_no}"
+        self.panel(title, delta_text.rstrip().splitlines(), color=self.FG_YELLOW)
+
     def show_raw_stream_line(self, line: str) -> None:
         self.panel("Claude Raw Output", [line], color=self.FG_YELLOW)
 

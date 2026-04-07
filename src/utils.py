@@ -486,7 +486,14 @@ def build_continuation_prompt(
             "6. Fill the missing pieces, fix weak points, and update the stage summary instead of throwing away correct work.\n"
             "7. Overwrite only the draft stage output path once you are ready to produce the updated complete summary.\n"
             "8. Do not leave placeholder text such as [In progress], [Pending], [TODO], [TBD], or similar unfinished markers.\n"
-            "9. If the existing stage work is partially correct, keep the correct parts and extend them rather than replacing them blindly."
+            "9. If the existing stage work is partially correct, keep the correct parts and extend them rather than replacing them blindly.\n"
+            "10. **Revision Delta**: Because this is a refinement pass, you MUST insert a `## Revision Delta` section "
+            "immediately after the top-level `# Stage ...` heading and before `## Objective`. "
+            "This section must contain a concise bullet-point summary of what you changed in this attempt compared to the previous version. Include:\n"
+            "   - Which sections were modified and how\n"
+            "   - Any files added, removed, or changed\n"
+            "   - A one-sentence summary of the overall improvement\n"
+            "This block is for the human reviewer only and will be stripped before the stage summary is saved."
         ),
     ]
     if intake_context_text:
@@ -567,6 +574,35 @@ def parse_refinement_suggestions(markdown: str) -> list[str]:
         raise ValueError(f"Missing refinement suggestion(s): {missing}")
 
     return [items[1], items[2], items[3]]
+
+
+_REVISION_DELTA_RE = re.compile(
+    r"^## Revision Delta\s*\n(.*?)(?=^## |\Z)",
+    flags=re.MULTILINE | re.DOTALL,
+)
+
+
+def extract_revision_delta(markdown: str) -> str | None:
+    """Extract the Revision Delta section content from stage markdown.
+
+    Returns the delta text if present, or None if the section is absent.
+    """
+    match = _REVISION_DELTA_RE.search(markdown)
+    if not match:
+        return None
+    return match.group(1).strip() or None
+
+
+def strip_revision_delta(markdown: str) -> str:
+    """Remove the Revision Delta section from stage markdown.
+
+    Returns the markdown with the delta block stripped so it is not persisted
+    in the final stage summary.
+    """
+    stripped = _REVISION_DELTA_RE.sub("", markdown)
+    # Collapse any triple-or-more blank lines left behind
+    stripped = re.sub(r"\n{3,}", "\n\n", stripped)
+    return stripped
 
 
 def contains_placeholder_text(text: str) -> bool:
