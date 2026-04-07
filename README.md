@@ -53,6 +53,17 @@ Most autoresearch systems optimize for autonomy.
 
 AutoR takes a different position: research is too important to hand over as a blind end-to-end loop. The goal is not to remove humans from research. The goal is to give them a stronger execution system.
 
+### At a Glance
+
+| Dimension | AutoR |
+| --- | --- |
+| Execution model | Claude Code as the execution layer, AutoR as the research control loop |
+| Control model | Human approval required after every stage |
+| Research unit | A reproducible run under `runs/<run_id>/` |
+| Workflow shape | Optional intake plus a fixed 8-stage pipeline |
+| Quality bar | Artifact-backed outputs, not markdown-only summaries |
+| Recovery | Resume, redo-stage, rollback-stage, stage-local continuation |
+
 ### Highlights
 
 | Commitment | Why it matters |
@@ -92,19 +103,21 @@ It is:
 
 AutoR already has a full example run used throughout the repository: `runs/20260330_101222`.
 
-That run produced:
+### Example Run Snapshot
 
-- a compiled paper PDF: [example_paper.pdf](assets/examples/example_paper.pdf)
-- executable research code
-- machine-readable datasets and result files
-- real figures used in the paper
-- review and dissemination materials
+| What the run produced | What it demonstrates |
+| --- | --- |
+| [example_paper.pdf](assets/examples/example_paper.pdf) | A full compiled paper artifact |
+| Executable research code | The run is not just a writing pipeline |
+| Machine-readable datasets and result files | Claims are backed by inspectable experiment outputs |
+| Real figures used in the paper | The run produces publication-style visuals, not placeholders |
+| Review and dissemination materials | The workflow continues past writing into release readiness |
 
 Highlighted outcomes from that run:
 
-- `AGSNv2` reached **36.21 ± 1.08** on Actor
-- the system produced a full manuscript package with real figures and artifacts
-- the final run preserved the full human-in-the-loop approval trail
+- `AGSNv2` reached **36.21 ± 1.08** on Actor.
+- The system produced a full manuscript package with real figures and artifacts.
+- The final run preserved the full human-in-the-loop approval trail.
 
 ### Terminal Experience
 
@@ -177,54 +190,21 @@ AI handles execution load; humans steer the research when direction actually mat
 - Claude CLI available on `PATH` for real runs
 - Local TeX tools are helpful for Stage 07, but not required for smoke tests
 
-### Start a new run
+### Common Commands
 
-```bash
-python main.py
-```
-
-### Start with an explicit goal
-
-```bash
-python main.py --goal "Your research goal here"
-```
-
-### Start with preloaded resources
-
-```bash
-python main.py --goal "Your research goal here" --resources paper.pdf refs.bib data.csv
-```
-
-### Run a local smoke test without Claude
-
-```bash
-python main.py --fake-operator --goal "Smoke test"
-```
-
-### Choose a Claude model
-
-```bash
-python main.py --model sonnet
-python main.py --model opus
-```
-
-### Choose a writing venue profile
-
-```bash
-python main.py --venue neurips_2025
-python main.py --venue nature
-python main.py --venue jmlr
-```
+| Goal | Command |
+| --- | --- |
+| Start a new run | `python main.py` |
+| Start with an explicit goal | `python main.py --goal "Your research goal here"` |
+| Start with preloaded resources | `python main.py --goal "Your research goal here" --resources paper.pdf refs.bib data.csv` |
+| Run a local smoke test without Claude | `python main.py --fake-operator --goal "Smoke test"` |
+| Choose a Claude model | `python main.py --model sonnet` or `python main.py --model opus` |
+| Choose a writing venue profile | `python main.py --venue neurips_2025` or `python main.py --venue nature` or `python main.py --venue jmlr` |
+| Resume the latest run | `python main.py --resume-run latest` |
+| Redo a stage inside the same run | `python main.py --resume-run 20260329_210252 --redo-stage 03` |
+| Roll back to a stage inside the same run | `python main.py --resume-run 20260329_210252 --rollback-stage 03` |
 
 If `--venue` is omitted, AutoR defaults to `neurips_2025`.
-
-### Resume or redo work inside the same run
-
-```bash
-python main.py --resume-run latest
-python main.py --resume-run 20260329_210252 --redo-stage 03
-python main.py --resume-run 20260329_210252 --rollback-stage 03
-```
 
 Valid stage identifiers include `03`, `3`, and `03_study_design`.
 
@@ -389,7 +369,7 @@ runs/<run_id>/
     └── reviews/
 ```
 
-### Directory semantics
+### Workspace Directory Semantics
 
 - `literature/`: reading notes, survey tables, benchmark notes
 - `code/`: runnable code, scripts, configs, implementations
@@ -604,21 +584,23 @@ A run with only markdown notes does not pass validation.
 
 The most valuable next steps are the ones that make AutoR more like a real research workflow, not more like a demo framework.
 
-- **Cross-stage rollback and invalidation**
-  Later-stage failures should be able to mark downstream work as stale.
-- **Machine-readable run manifest**
-  Add a lightweight source of truth for stage status, stale dependencies, and artifact pointers.
-- **Continuation handoff compression**
-  Make long stage refinement more stable without bloating context.
-- **Stronger automated tests**
-  Cover repair flow, resume fallback, artifact validation, and approval-loop correctness.
-- **Artifact indexing**
-  Add lightweight metadata around `data/`, `results/`, `figures/`, and `writing/`.
-- **Frontend run browser**
-  A lightweight UI for browsing runs, stages, logs, and artifacts, driven by the run directory itself.
+| Next step | Why it matters |
+| --- | --- |
+| **Deeper cross-stage rollback and invalidation** | Make downstream stale-state handling stronger and more explicit after earlier-stage changes. |
+| **Stronger machine-readable run state** | Extend the current run manifest into a better source of truth for stage status, stale dependencies, and artifact pointers. |
+| **Continuation handoff compression** | Make long stage refinement more stable without bloating context. |
+| **Stronger automated tests** | Cover repair flow, resume fallback, artifact validation, and approval-loop correctness more deeply. |
+| **Richer artifact indexing** | Extend metadata around `data/`, `results/`, `figures/`, and `writing/` without turning AutoR into a heavy platform. |
+| **Frontend run browser** | Add a lightweight UI for browsing runs, stages, logs, and artifacts directly from the run directory. |
+
+Implemented milestone:
 
 - ~~Stage-local continuation sessions.~~ Keep one Claude conversation per stage, reuse it for `1/2/3/4` refinement, and fall back to a fresh session only when resume fails. This is now implemented in the operator and manager flow.
 - ~~Artifact-level validation for non-toy outputs.~~ Enforce machine-readable data, result files, figures, LaTeX sources, PDF output, and review artifacts at the right stages. This is now part of the workflow validation path.
+
+<details>
+<summary><strong>Expanded roadmap notes</strong></summary>
+
 - Cross-stage rollback and invalidation. When a later stage reveals that an earlier design decision is wrong, the workflow should be able to jump back to an earlier stage and mark downstream stages as stale. This is the biggest current control-flow gap.
 - Machine-readable run manifest. Add a single source of truth such as `run_manifest.json` to track stage status, approval state, stale dependencies, session IDs, and key artifact pointers. This should make both automation and future UI work much cleaner.
 - Continuation handoff compression. Add a short machine-generated stage handoff file that summarizes what is already correct, what is missing, and which files matter most. This should reduce context growth and make continuation more stable over long runs.
@@ -627,6 +609,8 @@ The most valuable next steps are the ones that make AutoR more like a real resea
 - Review and dissemination package. Expand Stage 08 so it produces readiness checklists, threats-to-validity notes, artifact manifests, release notes, and external-facing research bundles. The final stage should feel like packaging a paper for real release, not just wrapping up text.
 - Frontend run dashboard. Build a lightweight UI that can browse runs, stage status, summaries, logs, artifacts, and validation failures. It should read from the run directory and manifest rather than introducing a database first.
 - README and open-source assets. Keep refining the README and add `assets/` images such as workflow diagrams, UI screenshots, and artifact examples. This is important for open-source clarity, onboarding, and project presentation.
+
+</details>
 
 ## 🌍 Community
 
