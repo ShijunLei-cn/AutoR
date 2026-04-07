@@ -1,4 +1,4 @@
-<h1 align="center">AutoR: Human-Centered Research Harness. 
+<h1 align="center">AutoR: Human-Centered Research OS 
 
 <p align="center">
 <sub>
