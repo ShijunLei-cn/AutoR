@@ -568,9 +568,28 @@ def inject_diagram_into_latex(
     content = "\n".join(cleaned_lines)
 
     # Insert after the first \section (and optional \label) or at the top.
-    section_match = re.search(r"(\\section\{[^}]*\}\s*(?:\\label\{[^}]*\}\s*)?)", content)
-    if section_match:
-        insert_pos = section_match.end()
+    # Use a brace-depth-aware match to handle nested braces like \section{The \DSV{} Pipeline}
+    def _find_section_end(text: str) -> int | None:
+        m = re.search(r"\\section\{", text)
+        if not m:
+            return None
+        depth = 1
+        i = m.end()
+        while i < len(text) and depth > 0:
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+            i += 1
+        # Skip optional \label{...} after section
+        label_match = re.match(r"\s*\\label\{[^}]*\}\s*", text[i:])
+        if label_match:
+            i += label_match.end()
+        return i
+
+    section_end = _find_section_end(content)
+    if section_end is not None:
+        insert_pos = section_end
         new_content = content[:insert_pos] + "\n\n" + figure_block + "\n\n" + content[insert_pos:]
     else:
         new_content = figure_block + "\n\n" + content
@@ -644,7 +663,7 @@ def post_writing_diagram_hook(run_root: Path, model_name: str = "gemini-2.5-flas
 
     # Inject into method.tex
     # Use relative path from writing/ directory
-    image_rel = "../figures/method_overview.jpg"
+    image_rel = "method_overview.jpg"
     injected = inject_diagram_into_latex(method_tex, image_rel, caption)
     if injected:
         print("[diagram_gen] Injected figure reference into method.tex")
