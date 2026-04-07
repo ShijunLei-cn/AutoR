@@ -384,12 +384,17 @@ async def generate_method_diagram(
     Path or None
         Path to the saved image, or None on failure.
     """
+    # The figure caption is only used at LaTeX-injection time. It must NOT be
+    # passed into the Planner / Stylist / Visualizer / Critic prompts, otherwise
+    # the model treats it as content to render and the resulting image ends up
+    # with caption text baked into the diagram alongside the method content.
     print("[diagram_gen] Step 1/4: Planner — generating diagram description...")
     planner_prompt = [
         {"type": "text", "text": (
             f"Methodology Section:\n{method_text}\n\n"
-            f"Figure Caption:\n{figure_caption}\n\n"
-            "Provide a detailed description of the target diagram (do not include figure titles):"
+            "Provide a detailed description of the target diagram (do not include "
+            "figure titles, captions, or any verbatim sentences from the methodology "
+            "as text labels in the diagram):"
         )}
     ]
     description = await _call_gemini_text(planner_prompt, PLANNER_SYSTEM_PROMPT, model_name)
@@ -403,7 +408,6 @@ async def generate_method_diagram(
             f"Detailed Description:\n{description}\n\n"
             f"Style Guidelines:\n{NEURIPS_STYLE_GUIDE}\n\n"
             f"Methodology Section:\n{method_text}\n\n"
-            f"Diagram Caption:\n{figure_caption}\n\n"
             "Your Output:"
         )}
     ]
@@ -434,7 +438,6 @@ async def generate_method_diagram(
             {"type": "text", "text": (
                 f"Detailed Description:\n{current_desc}\n\n"
                 f"Methodology Section:\n{method_text}\n\n"
-                f"Figure Caption:\n{figure_caption}\n\n"
                 "Your Output:"
             )},
         ]
@@ -661,9 +664,13 @@ def post_writing_diagram_hook(run_root: Path, model_name: str = "gemini-2.5-flas
     if result is None:
         return None
 
-    # Inject into method.tex
-    # Use relative path from writing/ directory
-    image_rel = "method_overview.jpg"
+    # Inject into method.tex.
+    # pdflatex resolves \includegraphics relative to the *main* .tex file's
+    # directory (workspace/writing/main.tex), not the included section file
+    # (workspace/writing/sections/method.tex). The figure lives at
+    # workspace/figures/method_overview.jpg, so the correct relative path from
+    # the main-tex perspective is `../figures/method_overview.jpg`.
+    image_rel = "../figures/method_overview.jpg"
     injected = inject_diagram_into_latex(method_tex, image_rel, caption)
     if injected:
         print("[diagram_gen] Injected figure reference into method.tex")
