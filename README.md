@@ -1,11 +1,12 @@
 <h1 align="center">AutoR: Human-centered. AI-executed research.
 
 <p align="center">
+<sub>
 <b>AI handles the execution load. Humans steer the research direction.</b>
 <br />
 A terminal-first, 8-stage pipeline that turns high-level goals into verifiable, venue-ready papers.
+</sub>
 </p>
-
 
 
 <p align="center">
