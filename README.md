@@ -170,6 +170,35 @@ AutoR is designed for terminal-first execution, but the interaction layer is not
   </tr>
 </table>
 
+### Additional Paper Pages
+
+AutoR is not represented by a single canonical manuscript. In addition to the main example run, we also use a broader set of full-paper outputs as visual materials for the project. The clipped pages below show a mix of title framing, result-heavy pages, system-overview visuals, and later-stage quantitative analysis across multiple papers produced with the same workflow.
+
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <strong>Paper Page 1</strong><br />
+      Full paper framing and abstract<br />
+      <img src="assets/community_papers/other_run_1_page1.png" alt="Additional paper page 1" width="220" />
+    </td>
+    <td align="center" valign="top">
+      <strong>Results Page</strong><br />
+      Comparative bars and evaluation summary<br />
+      <img src="assets/community_papers/other_run_1_results.png" alt="Additional paper results page" width="220" />
+    </td>
+    <td align="center" valign="top">
+      <strong>Overview Page</strong><br />
+      Structured visual breakdown of the method<br />
+      <img src="assets/community_papers/other_run_2_overview.png" alt="Additional paper overview page" width="220" />
+    </td>
+    <td align="center" valign="top">
+      <strong>Analysis Page</strong><br />
+      Dense plots from a later quantitative section<br />
+      <img src="assets/community_papers/other_run_3_results.png" alt="Additional paper analysis page" width="220" />
+    </td>
+  </tr>
+</table>
+
 ### Human-in-the-Loop in Practice
 
 The example run is interesting not because the AI was left alone, but because the human intervened at critical moments:
