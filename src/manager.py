@@ -6,6 +6,14 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from .bootstrap import (
+    bootstrap_profile_exists,
+    format_corpus_for_prompt,
+    format_corpus_stats_for_log,
+    format_profile_for_prompt,
+    missing_bootstrap_profile_artifacts,
+    scan_corpus,
+)
 from .project_bootstrap import (
     format_project_context_for_prompt,
     format_project_scan_for_prompt,
@@ -110,6 +118,7 @@ class ResearchManager:
         resources: list[ResourceEntry] | None = None,
         skip_intake: bool = False,
         project_root: Path | None = None,
+        paper_corpus: Path | None = None,
     ) -> bool:
         paths = self._create_run(user_goal, venue=venue, resources=resources)
         self.ui.show_run_started(paths.run_root.as_posix(), self.operator.model, venue or "default")
@@ -137,6 +146,14 @@ class ResearchManager:
                 self.ui.show_status("Run aborted.", level="warn")
                 return False
             bootstrap_start_stage = bootstrap_result
+
+        # Run bootstrap from paper corpus if provided
+        if paper_corpus is not None:
+            bootstrap_approved = self._run_bootstrap(paths, paper_corpus)
+            if not bootstrap_approved:
+                append_log_entry(paths.logs, "run_aborted", "Run aborted during bootstrap.")
+                self.ui.show_status("Run aborted.", level="warn")
+                return False
 
         return self._run_from_paths(paths, start_stage=bootstrap_start_stage)
 
@@ -436,9 +453,7 @@ class ResearchManager:
         )
         append_log_entry(paths.logs, "project_bootstrap_start", format_scan_stats_for_log(scan_result))
 
-        # Save heuristic results so Claude can read them
         save_project_bootstrap(paths, scan_result)
-
         scan_prompt_section = format_project_scan_for_prompt(scan_result)
 
         attempt_no = 1
@@ -543,6 +558,156 @@ class ResearchManager:
 
             if choice == "6":
                 return None
+
+    # ------------------------------------------------------------------
+    # Bootstrap stage (paper corpus → researcher profile)
+    # ------------------------------------------------------------------
+
+    BOOTSTRAP_STAGE = StageSpec(number=-1, slug="bootstrap", display_name="Paper Corpus Bootstrap")
+
+    def _run_bootstrap(self, paths: RunPaths, corpus_path: Path) -> bool:
+        """Scan the user's paper corpus and run Claude to extract a researcher profile.
+
+        Uses the same operator + approval loop so the user can review and refine
+        the extracted profile before downstream stages use it as context.
+        """
+        stage = self.BOOTSTRAP_STAGE
+
+        if bootstrap_profile_exists(paths):
+            self.ui.show_status("Bootstrap profile already exists, skipping.", level="info")
+            return True
+
+        self.ui.show_status(f"Scanning paper corpus: {corpus_path}", level="info")
+        try:
+            corpus_manifest = scan_corpus(corpus_path)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            self.ui.show_status(f"Bootstrap error: {exc}", level="error")
+            return False
+
+        if not corpus_manifest.papers:
+            self.ui.show_status("No extractable files found in paper corpus. Skipping bootstrap.", level="warn")
+            return True
+
+        stats = corpus_manifest.stats
+        self.ui.show_status(
+            f"Found {stats['total_papers']} paper(s), {stats['unique_references']} unique references. "
+            f"Running profile extraction...",
+            level="info",
+        )
+        append_log_entry(paths.logs, "bootstrap_start", format_corpus_stats_for_log(corpus_manifest))
+
+        corpus_prompt_section = format_corpus_for_prompt(corpus_manifest)
+
+        attempt_no = 1
+        revision_feedback: str | None = None
+        continue_session = False
+
+        while True:
+            self.ui.show_stage_start(stage.stage_title, attempt_no, continue_session)
+            prompt = self._build_bootstrap_prompt(paths, stage, corpus_prompt_section, revision_feedback, continue_session)
+            append_log_entry(paths.logs, f"bootstrap attempt {attempt_no} prompt", prompt)
+
+            result = self.operator.run_stage(stage, prompt, paths, attempt_no, continue_session=continue_session)
+            append_log_entry(
+                paths.logs,
+                f"bootstrap attempt {attempt_no} result",
+                (
+                    f"success: {result.success}\n"
+                    f"session_id: {result.session_id or '(unknown)'}\n"
+                    f"stage_file_path: {result.stage_file_path}\n\n"
+                    "stdout:\n"
+                    f"{result.stdout or '(empty)'}\n\n"
+                    "stderr:\n"
+                    f"{result.stderr or '(empty)'}"
+                ),
+            )
+
+            if not result.stage_file_path.exists():
+                self.ui.show_status(
+                    "Bootstrap summary draft missing. Running repair attempt...",
+                    level="warn",
+                )
+                repair_result = self.operator.repair_stage_summary(
+                    stage=stage, original_prompt=prompt,
+                    original_result=result, paths=paths, attempt_no=attempt_no,
+                )
+                result = repair_result
+
+            if not result.stage_file_path.exists():
+                fallback_text = "\n\n".join(
+                    part for part in [result.stdout, result.stderr] if part
+                )
+                result = self._materialize_missing_stage_draft(
+                    paths=paths, stage=stage, attempt_no=attempt_no,
+                    source="bootstrap attempt and repair", fallback_text=fallback_text,
+                )
+
+            stage_markdown = read_text(result.stage_file_path)
+
+            suggestions = parse_refinement_suggestions(stage_markdown)
+            self._display_stage_output(stage, stage_markdown)
+            choice = self._ask_choice(suggestions)
+            append_log_entry(paths.logs, f"bootstrap attempt {attempt_no} user_choice", f"choice: {choice}")
+
+            if choice in {"1", "2", "3"}:
+                selected = suggestions[int(choice) - 1]
+                revision_feedback = (
+                    "Continue the bootstrap conversation and improve the researcher profile. "
+                    "Do not discard correct completed parts. Address this refinement request:\n"
+                    f"{selected}"
+                )
+                continue_session = True
+                attempt_no += 1
+                continue
+
+            if choice == "4":
+                custom_feedback = self._read_multiline_feedback()
+                revision_feedback = (
+                    "Continue the bootstrap conversation and improve the researcher profile. "
+                    "Preserve correct parts unless the feedback requires changing them. "
+                    "Address this user feedback:\n"
+                    f"{custom_feedback}"
+                )
+                append_log_entry(paths.logs, f"bootstrap attempt {attempt_no} custom_feedback", custom_feedback)
+                continue_session = True
+                attempt_no += 1
+                continue
+
+            if choice == "5":
+                missing_artifacts = missing_bootstrap_profile_artifacts(paths)
+                if missing_artifacts:
+                    missing_block = "\n".join(f"- {path}" for path in missing_artifacts)
+                    append_log_entry(
+                        paths.logs,
+                        "bootstrap_missing_artifacts",
+                        missing_block,
+                    )
+                    self.ui.show_status(
+                        "Bootstrap profile artifacts are incomplete. Continuing refinement.",
+                        level="warn",
+                    )
+                    revision_feedback = (
+                        "Continue the bootstrap conversation and complete the missing profile artifacts. "
+                        "Do not discard correct completed artifacts. Write the missing files and refresh the stage summary.\n"
+                        f"Missing artifacts:\n{missing_block}"
+                    )
+                    continue_session = True
+                    attempt_no += 1
+                    continue
+
+                final_path = paths.stage_file(stage)
+                shutil.copyfile(result.stage_file_path, final_path)
+                append_log_entry(paths.logs, "bootstrap_approved", "Bootstrap profile approved.")
+                append_log_entry(
+                    paths.logs,
+                    "bootstrap_promoted",
+                    f"Promoted bootstrap summary.\ndraft: {result.stage_file_path}\nfinal: {final_path}",
+                )
+                self.ui.show_status("Approved bootstrap profile.", level="success")
+                return True
+
+            if choice == "6":
+                return False
 
     def _adopt_project_bootstrap_baseline(
         self,
@@ -665,6 +830,46 @@ class ResearchManager:
             "# Original User Request",
             user_request.strip(),
             project_section,
+            "# Revision Feedback",
+            revision_feedback.strip() if revision_feedback else "None.",
+        ]
+        return "\n\n".join(sections).strip() + "\n"
+
+    def _build_bootstrap_prompt(
+        self,
+        paths: RunPaths,
+        stage: StageSpec,
+        corpus_text: str,
+        revision_feedback: str | None,
+        continue_session: bool,
+    ) -> str:
+        """Build the prompt for the bootstrap stage."""
+        template = load_prompt_template(self.prompt_dir, stage)
+        stage_template = format_stage_template(template, stage, paths)
+
+        if continue_session:
+            return build_continuation_prompt(
+                stage, stage_template, paths,
+                handoff_context="",
+                revision_feedback=revision_feedback,
+            )
+
+        user_request = read_text(paths.user_input)
+        corpus_section = f"# User's Paper Corpus\n\n{corpus_text}"
+
+        sections = [
+            "# Stage Instructions",
+            stage_template.strip(),
+            "# Required Stage Summary Format",
+            (
+                "You must create or overwrite the stage summary markdown file using exactly the "
+                "top-level heading order below. Do not omit any section. Use exactly 3 numbered "
+                "refinement suggestions and exactly the fixed 6 option lines."
+            ),
+            "```md\n" + required_stage_output_template(stage).strip() + "\n```",
+            "# Original User Request",
+            user_request.strip(),
+            corpus_section,
             "# Revision Feedback",
             revision_feedback.strip() if revision_feedback else "None.",
         ]
@@ -1026,13 +1231,13 @@ class ResearchManager:
                 + "\n"
             )
 
-        # Inject project bootstrap context if available
-        project_context = format_project_context_for_prompt(paths)
-        if project_context and stage.number >= 1:
+        # Inject bootstrap researcher profile if available (stage-specific)
+        profile_text = format_profile_for_prompt(paths, stage_slug=stage.slug)
+        if profile_text and stage.number >= 1:
             stage_template = (
                 stage_template.rstrip()
-                + "\n\n# Existing Project Context (from repo bootstrap)\n\n"
-                + project_context
+                + "\n\n# Researcher Profile (from paper corpus bootstrap)\n\n"
+                + profile_text
                 + "\n"
             )
 

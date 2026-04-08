@@ -34,6 +34,7 @@ class ScriptedSmokeOperator:
         self.model = "smoke-test-model"
         self.invocations: dict[str, int] = {}
         self.continue_modes: dict[str, list[bool]] = {}
+        self.prompts: dict[str, list[str]] = {}
 
     def run_stage(
         self,
@@ -46,6 +47,7 @@ class ScriptedSmokeOperator:
         invocation = self.invocations.get(stage.slug, 0) + 1
         self.invocations[stage.slug] = invocation
         self.continue_modes.setdefault(stage.slug, []).append(continue_session)
+        self.prompts.setdefault(stage.slug, []).append(prompt)
         produced = self._materialize_artifacts(stage, paths, invocation)
         stage_file = paths.stage_tmp_file(stage)
         write_text(
@@ -80,6 +82,66 @@ class ScriptedSmokeOperator:
 
     def _materialize_artifacts(self, stage, paths, invocation: int) -> list[str]:
         produced: list[str] = []
+
+        if stage.slug == "bootstrap":
+            profile_files = {
+                paths.profile_dir / "research_profile.json": json.dumps(
+                    {
+                        "themes": ["reasoning"],
+                        "terminology": ["chain-of-thought"],
+                        "methods": ["prompting"],
+                        "venues": ["NeurIPS"],
+                        "confidence": "medium",
+                        "summary": "Researcher focused on reasoning workflows.",
+                    }
+                ),
+                paths.profile_dir / "citation_neighborhood.json": json.dumps(
+                    {
+                        "frequently_cited": [
+                            {"title": "Chain-of-Thought Prompting", "authors": "Wei et al.", "year": "2022"},
+                        ],
+                        "related_authors": ["Wei et al."],
+                        "key_venues": ["NeurIPS"],
+                        "seed_papers": [
+                            {
+                                "title": "Chain-of-Thought Prompting",
+                                "authors": "Wei et al.",
+                                "year": "2022",
+                                "why": "Foundational reasoning prior.",
+                            }
+                        ],
+                    }
+                ),
+                paths.profile_dir / "style_profile.json": json.dumps(
+                    {
+                        "voice": "mixed",
+                        "person": "first_plural",
+                        "formality": "formal",
+                        "avg_section_count": 6,
+                        "section_ordering": ["Introduction", "Method", "Experiments", "Conclusion"],
+                        "abstract_pattern": "problem-method-result",
+                        "notation_conventions": ["boldface for vectors"],
+                        "paragraph_style": "topic-sentence-first",
+                        "notes": "Prefers concise academic prose.",
+                    }
+                ),
+                paths.profile_dir / "style_notes.md": "# Writing Style Profile\n\n- Formal and concise.\n",
+                paths.profile_dir / "bootstrap_summary.md": "This corpus suggests a reasoning-focused researcher profile.\n",
+                paths.profile_dir / "corpus_manifest.json": json.dumps(
+                    {
+                        "corpus_path": str(paths.run_root / "paper_corpus"),
+                        "scanned_at": "2026-04-08T00:00:00",
+                        "total_files_found": 2,
+                        "files_processed": 2,
+                        "files_skipped": 0,
+                        "skipped_reasons": [],
+                        "papers": [],
+                    }
+                ),
+            }
+            for path, content in profile_files.items():
+                write_text(path, content)
+                produced.append(relative_to_run(path, paths.run_root))
 
         note_path = paths.notes_dir / f"{stage.slug}_smoke_note.md"
         write_text(note_path, f"# Smoke Note\n\nStage: {stage.slug}\nInvocation: {invocation}\n")
@@ -396,6 +458,52 @@ class ManagerSmokeTests(unittest.TestCase):
             self.assertIn(STAGES[2].slug, operator.invocations)
             self.assertNotIn(STAGE_01.slug, operator.invocations)
             self.assertNotIn(STAGES[1].slug, operator.invocations)
+
+    def test_paper_corpus_bootstrap_injects_profile_into_downstream_prompts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir, operator, manager = self._build_manager(tmp_dir)
+            corpus_root = Path(tmp_dir) / "paper_corpus"
+            corpus_root.mkdir()
+            (corpus_root / "paper.tex").write_text(
+                (
+                    "\\title{Prior Work}\n"
+                    "\\begin{document}\n"
+                    "\\begin{abstract}We study reasoning workflows.\\end{abstract}\n"
+                    "\\section{Introduction}Prior text.\n"
+                    "\\end{document}\n"
+                ),
+                encoding="utf-8",
+            )
+            (corpus_root / "refs.bib").write_text(
+                (
+                    "@article{cot2022,\n"
+                    "  title={Chain-of-Thought Prompting},\n"
+                    "  author={Wei et al.},\n"
+                    "  year={2022},\n"
+                    "  journal={NeurIPS}\n"
+                    "}\n"
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                success = manager.run(
+                    "Use my prior papers to align the new project.",
+                    venue="neurips_2025",
+                    paper_corpus=corpus_root,
+                )
+
+            self.assertTrue(success)
+            run_root = self._run_roots(runs_dir)[0]
+            paths = build_run_paths(run_root)
+            self.assertIn("bootstrap", operator.invocations)
+            self.assertTrue((paths.profile_dir / "research_profile.json").exists())
+            self.assertTrue((paths.profile_dir / "style_profile.json").exists())
+            stage01_prompt = operator.prompts[STAGE_01.slug][0]
+            self.assertIn("Researcher Profile (from paper corpus bootstrap)", stage01_prompt)
+            self.assertIn("Seed papers for literature search", stage01_prompt)
+            memory_text = read_text(paths.memory)
+            self.assertNotIn("Stage -1", memory_text)
 
 
 if __name__ == "__main__":

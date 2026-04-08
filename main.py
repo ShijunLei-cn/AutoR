@@ -80,6 +80,12 @@ def parse_args() -> argparse.Namespace:
              "current project state and recommend a re-entry stage.",
     )
     parser.add_argument(
+        "--paper-corpus",
+        metavar="PATH",
+        help="Path to a directory of the user's own prior papers (PDFs, LaTeX, BibTeX, notes). "
+             "AutoR will analyze them to build a researcher profile that seeds downstream stages.",
+    )
+    parser.add_argument(
         "--stage-timeout",
         type=int,
         default=14400,
@@ -211,6 +217,7 @@ def main() -> int:
         resources = collect_resource_paths_from_ui(ui, initial_resources=args.resources)
 
     project_root_arg = Path(args.project_root).expanduser().resolve() if args.project_root else None
+    paper_corpus = Path(args.paper_corpus).expanduser().resolve() if args.paper_corpus else None
 
     return 0 if manager.run(
         goal,
@@ -218,6 +225,7 @@ def main() -> int:
         resources=resources or None,
         skip_intake=skip_intake,
         project_root=project_root_arg,
+        paper_corpus=paper_corpus,
     ) else 1
 
 
