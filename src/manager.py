@@ -60,6 +60,7 @@ from .utils import (
     DEFAULT_REFINEMENT_SUGGESTIONS,
     FIXED_STAGE_OPTIONS,
     INTAKE_STAGE,
+    MAX_STAGE_ATTEMPTS,
     STAGES,
     RunPaths,
     StageSpec,
@@ -313,6 +314,14 @@ class ResearchManager:
         mark_stage_execution_started(paths, stage)
 
         while True:
+            if attempt_no > MAX_STAGE_ATTEMPTS:
+                self.ui.show_status(
+                    f"{stage.stage_title} failed after {MAX_STAGE_ATTEMPTS} attempts. Escalating to user.",
+                    level="error",
+                )
+                append_log_entry(paths.logs, f"{stage.slug} max_attempts_exceeded",
+                                 f"Stopped after {MAX_STAGE_ATTEMPTS} attempts.")
+                return False
             self.ui.show_stage_start(stage.stage_title, attempt_no, continue_session)
             prompt = self._build_stage_prompt(paths, stage, revision_feedback, continue_session)
             append_log_entry(paths.logs, f"{stage.slug} attempt {attempt_no} prompt", prompt)
@@ -476,6 +485,14 @@ class ResearchManager:
         continue_session = False
 
         while True:
+            if attempt_no > MAX_STAGE_ATTEMPTS:
+                self.ui.show_status(
+                    f"{stage.stage_title} failed after {MAX_STAGE_ATTEMPTS} attempts. Escalating to user.",
+                    level="error",
+                )
+                append_log_entry(paths.logs, f"project_bootstrap max_attempts_exceeded",
+                                 f"Stopped after {MAX_STAGE_ATTEMPTS} attempts.")
+                return None
             self.ui.show_stage_start(stage.stage_title, attempt_no, continue_session)
             prompt = self._build_project_bootstrap_prompt(
                 paths, stage, scan_prompt_section, project_root, revision_feedback, continue_session,
@@ -625,6 +642,14 @@ class ResearchManager:
         continue_session = False
 
         while True:
+            if attempt_no > MAX_STAGE_ATTEMPTS:
+                self.ui.show_status(
+                    f"{stage.stage_title} failed after {MAX_STAGE_ATTEMPTS} attempts. Escalating to user.",
+                    level="error",
+                )
+                append_log_entry(paths.logs, f"bootstrap max_attempts_exceeded",
+                                 f"Stopped after {MAX_STAGE_ATTEMPTS} attempts.")
+                return False
             self.ui.show_stage_start(stage.stage_title, attempt_no, continue_session)
             prompt = self._build_bootstrap_prompt(paths, stage, corpus_prompt_section, revision_feedback, continue_session)
             append_log_entry(paths.logs, f"bootstrap attempt {attempt_no} prompt", prompt)
@@ -905,13 +930,25 @@ class ResearchManager:
         attempt_no = read_attempt_count(paths, stage) + 1
         revision_feedback: str | None = None
         continue_session = False
+        last_validation_errors: list[str] = []
         mark_stage_execution_started(paths, stage)
 
         while True:
+            if attempt_no > MAX_STAGE_ATTEMPTS:
+                self.ui.show_status(
+                    f"{stage.stage_title} failed after {MAX_STAGE_ATTEMPTS} attempts. Escalating to user.",
+                    level="error",
+                )
+                append_log_entry(paths.logs, f"{stage.slug} max_attempts_exceeded",
+                                 f"Stopped after {MAX_STAGE_ATTEMPTS} attempts. "
+                                 f"Last errors: {last_validation_errors}")
+                return False
             mark_stage_running_manifest(paths, stage, attempt_no)
             write_attempt_count(paths, stage, attempt_no)
             self._print(f"\nRunning {stage.stage_title} (attempt {attempt_no})...")
-            prompt = self._build_stage_prompt(paths, stage, revision_feedback, continue_session)
+            prompt = self._build_stage_prompt(paths, stage, revision_feedback, continue_session,
+                                             attempt_no=attempt_no,
+                                             previous_validation_errors=last_validation_errors or None)
             append_log_entry(
                 paths.logs,
                 f"{stage.slug} attempt {attempt_no} prompt",
@@ -1089,6 +1126,7 @@ class ResearchManager:
                             "Keep all correct work already completed, but produce a fully complete stage summary "
                             "with no placeholder markers and ensure every required section is substantively filled."
                         )
+                        last_validation_errors = list(validation_errors)
                         continue_session = True
                         attempt_no += 1
                         continue
@@ -1242,6 +1280,8 @@ class ResearchManager:
         stage: StageSpec,
         revision_feedback: str | None,
         continue_session: bool,
+        attempt_no: int = 1,
+        previous_validation_errors: list[str] | None = None,
     ) -> str:
         template = load_prompt_template(self.prompt_dir, stage)
         stage_template = format_stage_template(template, stage, paths)
@@ -1312,6 +1352,8 @@ class ResearchManager:
             return build_continuation_prompt(
                 stage, stage_template, paths, handoff_context, revision_feedback,
                 intake_context_text=intake_context_text,
+                attempt_no=attempt_no,
+                previous_validation_errors=previous_validation_errors,
             )
 
         user_request = read_text(paths.user_input)
