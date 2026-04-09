@@ -82,6 +82,8 @@ from .utils import (
     initialize_run_config,
     load_prompt_template,
     mark_stage_execution_started,
+    extract_revision_delta,
+    strip_revision_delta,
     parse_refinement_suggestions,
     read_attempt_count,
     read_text,
@@ -354,6 +356,13 @@ class ResearchManager:
 
             stage_markdown = read_text(result.stage_file_path)
 
+            # Extract and display revision delta before showing the full summary
+            delta = extract_revision_delta(stage_markdown)
+            if delta and attempt_no >= 2:
+                self.ui.show_revision_delta(delta, attempt_no)
+            stage_markdown = strip_revision_delta(stage_markdown)
+            write_text(result.stage_file_path, stage_markdown)
+
             # Show output and let user choose (same approval loop as _run_stage)
             suggestions = parse_refinement_suggestions(stage_markdown)
             self._display_stage_output(stage, stage_markdown)
@@ -509,6 +518,13 @@ class ResearchManager:
                 )
 
             stage_markdown = read_text(result.stage_file_path)
+
+            delta = extract_revision_delta(stage_markdown)
+            if delta and attempt_no >= 2:
+                self.ui.show_revision_delta(delta, attempt_no)
+            stage_markdown = strip_revision_delta(stage_markdown)
+            write_text(result.stage_file_path, stage_markdown)
+
             suggestions = parse_refinement_suggestions(stage_markdown)
             self._display_stage_output(stage, stage_markdown)
             choice = self._ask_choice(suggestions)
@@ -973,6 +989,10 @@ class ResearchManager:
                 )
 
             stage_markdown = read_text(result.stage_file_path)
+            # Extract revision delta before validation (not a required section)
+            revision_delta = extract_revision_delta(stage_markdown)
+            stage_markdown = strip_revision_delta(stage_markdown)
+            write_text(result.stage_file_path, stage_markdown)
             validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
             if validation_errors:
                 mark_stage_failed_manifest(paths, stage, "; ".join(validation_errors))
@@ -1020,6 +1040,9 @@ class ResearchManager:
                     )
 
                 stage_markdown = read_text(repair_result.stage_file_path)
+                revision_delta = extract_revision_delta(stage_markdown)
+                stage_markdown = strip_revision_delta(stage_markdown)
+                write_text(repair_result.stage_file_path, stage_markdown)
                 validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                 if validation_errors:
                     self.ui.show_status(
@@ -1088,6 +1111,8 @@ class ResearchManager:
                 ),
             )
 
+            if revision_delta and attempt_no >= 2:
+                self.ui.show_revision_delta(revision_delta, attempt_no)
             suggestions = parse_refinement_suggestions(stage_markdown)
             self._display_stage_output(stage, stage_markdown)
             choice = self._ask_choice(suggestions)
