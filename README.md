@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  A terminal-first research harness over Claude Code that turns long, messy research work into reproducible, artifact-backed runs.
+  A terminal-first research harness that turns long, messy research work into reproducible, artifact-backed runs.
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Workflow-Intake%20%2B%208%20Stages-black" alt="Intake plus 8 stages" />
   <img src="https://img.shields.io/badge/Interface-Terminal--first-green" alt="Terminal-first" />
   <img src="https://img.shields.io/badge/Human-Approval%20Required-orange" alt="Human approval required" />
-  <img src="https://img.shields.io/badge/Execution-Claude%20Code%20Harness-purple" alt="Claude Code harness" />
+  <img src="https://img.shields.io/badge/Execution-Agent%20Harness-purple" alt="Agent harness" />
   <img src="https://img.shields.io/badge/Artifacts-Reproducible%20Research%20Runs-red" alt="Reproducible research runs" />
   <a href="https://github.com/HavenIntelligence/AutoR">
     <img src="https://img.shields.io/github/stars/HavenIntelligence/AutoR?style=social" alt="GitHub stars" />
@@ -44,7 +44,7 @@
 
 > AutoR is not a chat demo, not a generic agent framework, and not a markdown-only research toy.
 >
-> It is a structured research harness over Claude Code:
+> It is a structured research harness over a coding agent execution layer:
 > **AI handles execution, humans own the direction, and every run becomes an inspectable research artifact on disk.**
 
 ## Overview
@@ -57,7 +57,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 
 | Dimension | AutoR |
 | --- | --- |
-| Execution model | Claude Code as the execution layer, AutoR as the research control loop |
+| Execution model | A coding agent as the execution layer, AutoR as the research control loop |
 | Control model | Human approval required after every stage |
 | Research unit | A reproducible run under `runs/<run_id>/` |
 | Workflow shape | Optional intake plus a fixed 8-stage pipeline |
@@ -66,12 +66,20 @@ AutoR takes a different position: research is too important to hand over as a bl
 
 ### Highlights
 
-| Commitment | Why it matters |
-| --- | --- |
-| **Human-centered research execution** | AutoR is not an autonomous scientist. AI handles execution; humans own the direction at every stage boundary. |
-| **A research harness over Claude Code** | AutoR does not reinvent the coding agent. It constrains, validates, and operationalizes Claude Code inside a real research workflow. |
-| **Every run is a reproducible research artifact** | A run leaves behind prompts, logs, stage summaries, code, data, results, figures, writing sources, compiled artifacts, and approval trail under `runs/<run_id>/`. |
-| **Verifiable outputs, not paper-shaped theater** | AutoR does not ask "does this look conference-ready?" It asks "can you verify every claim with artifacts?" |
+| Layer | Highlight | What AutoR actually does |
+| --- | --- | --- |
+| Big idea | **Human-centered research execution** | AutoR is not an autonomous scientist. AI handles execution; humans retain approval and direction at every stage boundary. |
+| Big idea | **Research loop over agent loop** | The system manages stage progression, validation, repair, recovery, and human checkpoints above the lower-level agent execution loop. |
+| Big idea | **Every run is a reproducible research artifact** | Each run leaves behind prompts, logs, approved summaries, code, data, figures, writing sources, and packaged outputs under `runs/<run_id>/`. |
+| Big idea | **Verifiable outputs, not paper-shaped theater** | The workflow is judged by inspectable artifacts and human approval, not by whether a generated document merely looks polished. |
+| Useful feature | **Structured literature organization** | Survey notes, bibliographies, related-work tables, and reading artifacts stay under `workspace/literature/` instead of disappearing into chat history. |
+| Useful feature | **Automated experiment manifests** | Machine-readable experiment and result files make runs inspectable, comparable, and reusable downstream. |
+| Useful feature | **Citation verification and writing checks** | Writing expects citation verification, build logs, and self-review artifacts before Stage 07 is considered complete. |
+| Useful feature | **Artifact indexing across stages** | `artifact_index.json` and related manifests help later stages find data, results, and figures without guessing from filenames. |
+| Useful feature | **Resume, redo, and rollback controls** | Long research runs can continue in place, retry a stage, or roll downstream state back without starting over. |
+| Useful feature | **Venue-aware packaging** | AutoR can package manuscript sources, PDFs, review materials, and release-ready artifacts instead of stopping at markdown summaries. |
+
+In practice, that means AutoR is useful not only because of the high-level framing, but also because it handles real research chores: literature organization, experiment manifests, citation verification, artifact indexing, manuscript packaging, and recoverable long-running workflows.
 
 ### What AutoR Guarantees
 
@@ -79,7 +87,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 - Approved summaries become the only cross-stage memory.
 - Every run is isolated, resumable, and auditable.
 - Later stages must produce real artifacts, not only prose.
-- Claude Code is the execution layer; AutoR is the research control loop above it.
+- A coding agent is the execution layer; AutoR is the research control loop above it.
 
 ### Why AutoR?
 
