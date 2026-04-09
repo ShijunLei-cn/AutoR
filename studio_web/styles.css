@@ -1,0 +1,289 @@
+:root {
+  --bg: #f6f2ea;
+  --surface: #eef3f6;
+  --card: #fbfcfd;
+  --ink: #18222d;
+  --muted: #5b6875;
+  --line: #d8e0e7;
+  --accent: #1f7a6a;
+  --accent-soft: #dff1ec;
+  --warning: #b9822e;
+  --danger: #c65a46;
+  --shadow: 0 12px 40px rgba(24, 34, 45, 0.08);
+  --radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(31, 122, 106, 0.08), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(185, 130, 46, 0.08), transparent 24%),
+    var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+body {
+  padding: 24px;
+}
+
+.app-shell {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.topbar h1,
+.panel-header h2,
+.inspector-block h3 {
+  margin: 0;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 320px;
+  gap: 20px;
+}
+
+.panel {
+  background: rgba(251, 252, 253, 0.92);
+  border: 1px solid rgba(216, 224, 231, 0.95);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar,
+.stages-panel,
+.inspector-panel {
+  min-height: 70vh;
+}
+
+.document-panel {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.runs-list,
+.stage-rail,
+.inspector-block,
+.file-tree,
+.document-body {
+  padding: 16px 18px 20px;
+}
+
+.runs-list,
+.stage-rail,
+.file-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.run-card,
+.stage-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--card);
+}
+
+.run-card {
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.run-card:hover,
+.stage-item:hover {
+  border-color: rgba(31, 122, 106, 0.45);
+}
+
+.run-card.is-active,
+.stage-item.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(31, 122, 106, 0.12);
+}
+
+.run-card-title,
+.stage-title {
+  font-weight: 700;
+}
+
+.run-card-meta,
+.stage-meta,
+.meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.stage-status {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stage-status.status-approved {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.stage-status.status-human_review,
+.stage-status.status-running {
+  background: rgba(185, 130, 46, 0.14);
+  color: var(--warning);
+}
+
+.stage-status.status-failed,
+.stage-status.status-stale {
+  background: rgba(198, 90, 70, 0.14);
+  color: var(--danger);
+}
+
+.document-body {
+  flex: 1;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-family: "Source Serif 4", Georgia, serif;
+}
+
+.empty-state {
+  color: var(--muted);
+}
+
+.summary-list {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.summary-list dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.summary-list dd {
+  margin: 0;
+  font-size: 14px;
+}
+
+.artifact-summary {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.artifact-summary li {
+  margin-bottom: 8px;
+}
+
+.tree-node {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tree-label {
+  color: var(--ink);
+  font-size: 13px;
+  font-family: "JetBrains Mono", "SFMono-Regular", monospace;
+}
+
+.tree-children {
+  margin-left: 14px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.badge,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.badge {
+  padding: 7px 12px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.button {
+  border: none;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+
+.button-secondary {
+  background: var(--ink);
+  color: white;
+}
+
+@media (max-width: 1280px) {
+  .layout,
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar,
+  .stages-panel,
+  .inspector-panel,
+  .document-panel {
+    min-height: auto;
+  }
+}

@@ -66,16 +66,50 @@ The first version should stay local-first. AutoR is file-heavy and already optim
 The repository now includes a first backend foundation module:
 
 - `src/studio_service.py`
+- `src/studio_http.py`
+- `studio_web/*`
 
-It does not expose HTTP yet. Instead it stabilizes the backend semantics that the future API layer should wrap:
+The current implementation now includes a lightweight local HTTP layer on top of that core.
+
+The foundation currently stabilizes:
 
 - project metadata storage under a local app metadata root
 - run summary loading from manifests and configs
 - stage document access
 - workspace file tree generation
 - iteration planning for `continue`, `redo`, and `branch`
+- local JSON endpoints over the backend core
 
-This keeps the first implementation dependency-light while establishing the state model required by the UI.
+This keeps the implementation dependency-light while establishing the state model and transport surface required by the UI.
+
+### Current launch command
+
+```bash
+python -m src.studio_http --repo-root . --host 127.0.0.1 --port 8765
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765/studio/
+```
+
+### Currently implemented routes
+
+- `GET /healthz`
+- `GET /api/projects`
+- `POST /api/projects`
+- `POST /api/projects/{project_id}/runs`
+- `GET /api/runs`
+- `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/stages/{stage_slug}`
+- `GET /api/runs/{run_id}/files/tree`
+- `GET /api/runs/{run_id}/files/content`
+- `GET /api/runs/{run_id}/artifacts`
+- `POST /api/runs/{run_id}/iterations/plan`
+- `GET /studio/`
+- `GET /studio/styles.css`
+- `GET /studio/app.js`
 
 ## 4. System Boundaries
 

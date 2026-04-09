@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AutoR Studio</title>
+    <link rel="stylesheet" href="/studio/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">AutoR Studio</p>
+          <h1>Run Workspace Preview</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="connection-status" class="badge">Connecting</span>
+          <button id="reload-button" class="button button-secondary" type="button">Reload</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="panel sidebar">
+          <div class="panel-header">
+            <h2>Runs</h2>
+            <span id="run-count" class="meta">0</span>
+          </div>
+          <div id="runs-list" class="runs-list"></div>
+        </aside>
+
+        <section class="workspace">
+          <div class="workspace-grid">
+            <nav class="panel stages-panel">
+              <div class="panel-header">
+                <h2>Stages</h2>
+                <span id="run-status" class="meta">Idle</span>
+              </div>
+              <div id="stage-rail" class="stage-rail"></div>
+            </nav>
+
+            <section class="panel document-panel">
+              <div class="panel-header">
+                <div>
+                  <p id="run-title" class="eyebrow">No run selected</p>
+                  <h2 id="document-title">Stage Document</h2>
+                </div>
+                <span id="document-meta" class="meta"></span>
+              </div>
+              <article id="stage-document" class="document-body empty-state">
+                Select a run to inspect its current state.
+              </article>
+            </section>
+
+            <aside class="panel inspector-panel">
+              <div class="panel-header">
+                <h2>Inspector</h2>
+                <span id="artifact-total" class="meta">0 artifacts</span>
+              </div>
+              <section class="inspector-block">
+                <h3>Run Summary</h3>
+                <dl id="run-summary" class="summary-list"></dl>
+              </section>
+              <section class="inspector-block">
+                <h3>Artifacts</h3>
+                <ul id="artifact-summary" class="artifact-summary"></ul>
+              </section>
+              <section class="inspector-block">
+                <h3>Workspace Tree</h3>
+                <div id="file-tree" class="file-tree"></div>
+              </section>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/studio/app.js" type="module"></script>
+  </body>
+</html>

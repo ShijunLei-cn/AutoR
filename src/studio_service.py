@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import asdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -312,6 +313,26 @@ class StudioService:
         paths = self._require_run(run_id)
         return load_artifact_index(paths.artifact_index)
 
+    def get_file_content(self, run_id: str, relative_path: str) -> dict[str, object]:
+        paths = self._require_run(run_id)
+        path = self._resolve_run_relative_path(paths, relative_path)
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(f"Unknown run file: {relative_path}")
+        run_root = paths.run_root.resolve()
+        try:
+            content = path.read_text(encoding="utf-8")
+            encoding = "utf-8"
+        except UnicodeDecodeError:
+            content = ""
+            encoding = "binary"
+        return {
+            "run_id": run_id,
+            "relative_path": str(path.resolve().relative_to(run_root)).replace("\\", "/"),
+            "size_bytes": path.stat().st_size,
+            "encoding": encoding,
+            "content": content,
+        }
+
     def build_file_tree(
         self,
         run_id: str,
@@ -430,6 +451,15 @@ class StudioService:
             return {}
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def _resolve_run_relative_path(self, paths: RunPaths, relative_path: str) -> Path:
+        candidate = (paths.run_root / relative_path).resolve()
+        run_root = paths.run_root.resolve()
+        try:
+            candidate.relative_to(run_root)
+        except ValueError as exc:
+            raise ValueError(f"Path escapes run root: {relative_path}") from exc
+        return candidate
+
 
 def _resolve_stage(stage_slug: str):
     for stage in STAGES:
@@ -445,3 +475,9 @@ def _affected_stage_slugs(base_stage_slug: str, scope_type: IterationScopeType) 
     if scope_type in {"file", "subtree", "manuscript"}:
         return [stage.slug for stage in STAGES if stage.number >= base_stage.number]
     return [base_stage.slug]
+
+
+def studio_to_dict(value):
+    if isinstance(value, ArtifactIndex):
+        return value.to_dict()
+    return asdict(value)

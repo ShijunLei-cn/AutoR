@@ -36,7 +36,12 @@ Partially implemented.
 Delivered now:
 
 - `src/studio_service.py`
+- `src/studio_http.py`
+- `studio_web/index.html`
+- `studio_web/styles.css`
+- `studio_web/app.js`
 - `tests/test_studio_service.py`
+- `tests/test_studio_http.py`
 
 Covered in the current implementation:
 
@@ -45,6 +50,8 @@ Covered in the current implementation:
 - stage document access
 - workspace file tree construction
 - iteration planning for continue, redo, and branch
+- a lightweight local JSON HTTP adapter for the first read-oriented UI flows
+- a lightweight local browser shell for run browsing and stage inspection
 
 ### Backend work
 

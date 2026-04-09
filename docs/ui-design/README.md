@@ -230,7 +230,12 @@ This combines:
 The first backend-oriented slice is now implemented in the repository:
 
 - `src/studio_service.py`
+- `src/studio_http.py`
+- `studio_web/index.html`
+- `studio_web/styles.css`
+- `studio_web/app.js`
 - `tests/test_studio_service.py`
+- `tests/test_studio_http.py`
 
 This initial slice focuses on the state model required by the generated Project Hub and Run Workspace concepts:
 
@@ -239,6 +244,8 @@ This initial slice focuses on the state model required by the generated Project 
 - stage document loading
 - workspace file tree browsing
 - iteration planning for continue, redo, and branch
+- local JSON HTTP endpoints for projects, runs, stages, files, artifacts, and iteration planning
+- a zero-dependency local UI shell that consumes those endpoints
 
 The next logical step is to wrap this backend core with an HTTP service layer and then build the first UI shell on top of it.
 
