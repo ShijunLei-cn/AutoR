@@ -181,11 +181,11 @@ The manuscript pages below are only the visible surface of larger AutoR runs. To
       <em>Do More Experts Help?</em> A parameter-matched MoE-LoRA study. The selected pages show the framing page and a chart-heavy evidence page.
     </td>
     <td align="center" valign="top">
-      <img src="assets/community_papers/other_run_1_page1.png" alt="Output 2 page 1" width="220" /><br />
+      <img src="assets/paper_gallery/other_run_1_page1.png" alt="Output 2 page 1" width="220" /><br />
       <strong>Page 1</strong>
     </td>
     <td align="center" valign="top">
-      <img src="assets/community_papers/other_run_1_results.png" alt="Output 2 evidence page" width="220" /><br />
+      <img src="assets/paper_gallery/other_run_1_results.png" alt="Output 2 evidence page" width="220" /><br />
       <strong>Evidence Page</strong>
     </td>
   </tr>
@@ -195,11 +195,11 @@ The manuscript pages below are only the visible surface of larger AutoR runs. To
       <em>Attention Sink Onset in Tiny Transformers</em> A controlled factorial study. The chosen pages show the opening page and a later structured overview page with visual decomposition.
     </td>
     <td align="center" valign="top">
-      <img src="assets/community_papers/other_run_2_page1.png" alt="Output 3 page 1" width="220" /><br />
+      <img src="assets/paper_gallery/other_run_2_page1.png" alt="Output 3 page 1" width="220" /><br />
       <strong>Page 1</strong>
     </td>
     <td align="center" valign="top">
-      <img src="assets/community_papers/other_run_2_overview.png" alt="Output 3 overview page" width="220" /><br />
+      <img src="assets/paper_gallery/other_run_2_overview.png" alt="Output 3 overview page" width="220" /><br />
       <strong>Overview Page</strong>
     </td>
   </tr>
@@ -209,11 +209,11 @@ The manuscript pages below are only the visible surface of larger AutoR runs. To
       <em>HSOD: Harmonic Spectral Operator Decomposition</em> A stability-focused time-series study. The pair below shows the framing page and a later page with dense training-dynamics plots.
     </td>
     <td align="center" valign="top">
-      <img src="assets/community_papers/other_run_3_page1.png" alt="Output 4 page 1" width="220" /><br />
+      <img src="assets/paper_gallery/other_run_3_page1.png" alt="Output 4 page 1" width="220" /><br />
       <strong>Page 1</strong>
     </td>
     <td align="center" valign="top">
-      <img src="assets/community_papers/other_run_3_results.png" alt="Output 4 analysis page" width="220" /><br />
+      <img src="assets/paper_gallery/other_run_3_results.png" alt="Output 4 analysis page" width="220" /><br />
       <strong>Analysis Page</strong>
     </td>
   </tr>
