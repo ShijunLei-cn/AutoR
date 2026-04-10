@@ -8,9 +8,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from .artifact_index import ArtifactIndex, load_artifact_index
-from .manifest import ensure_run_manifest, load_run_manifest
-from .utils import STAGES, RunPaths, build_run_paths, read_text
+from ..artifact_index import ArtifactIndex, load_artifact_index
+from ..manifest import ensure_run_manifest, load_run_manifest
+from ..utils import STAGES, RunPaths, build_run_paths, read_text
+from .sessions import parse_real_session, read_events, summarize_sessions
+from .studio_runner import StudioRunner
 
 
 IterationMode = Literal["continue", "redo", "branch"]
@@ -296,6 +298,19 @@ class StudioService:
         self.runs_dir = runs_dir or (repo_root / "runs")
         self.metadata_root = metadata_root or (repo_root / ".autor")
         self.project_store = ProjectIndexStore(self.metadata_root)
+        # Always use the real Claude-backed runner. AutoR is a real research
+        # tool; the Studio frontend never offers a mock toggle. If the Claude
+        # CLI isn't installed we fail loudly so the operator knows to fix it.
+        if not StudioRunner.is_available():
+            raise RuntimeError(
+                "Claude CLI not found on PATH. AutoR Studio requires the `claude` "
+                "binary to drive real research runs. Install it from "
+                "https://docs.claude.com/claude-code or see docs/."
+            )
+        self.runner = StudioRunner(
+            runs_dir=self.runs_dir,
+            project_root=self.repo_root,
+        )
 
     def create_project(
         self,
@@ -324,14 +339,29 @@ class StudioService:
         if project is None:
             raise KeyError(f"Unknown project id: {project_id}")
 
-        run_id = project.active_run_id or (project.run_ids[-1] if project.run_ids else None)
+        # Walk the project's run list newest-first, skipping any that have been
+        # deleted from disk. This keeps the projects overview endpoint alive
+        # even if the user removed a runs/ subdirectory manually.
+        candidate_run_ids: list[str] = []
+        if project.active_run_id:
+            candidate_run_ids.append(project.active_run_id)
+        for rid in reversed(project.run_ids):
+            if rid not in candidate_run_ids:
+                candidate_run_ids.append(rid)
+
         latest_run_status: str | None = None
         latest_completed_stage_slug: str | None = None
-        if run_id is not None:
-            run_summary = self.get_run_summary(run_id)
+        for rid in candidate_run_ids:
+            try:
+                run_summary = self.get_run_summary(rid)
+            except (FileNotFoundError, KeyError):
+                continue
+            except Exception:
+                continue
             latest_run_status = run_summary.run_status
             approved = [stage.slug for stage in run_summary.stages if stage.approved]
             latest_completed_stage_slug = approved[-1] if approved else None
+            break
 
         return StudioProjectSummary(
             project_id=project.project_id,
@@ -349,6 +379,53 @@ class StudioService:
     def attach_run_to_project(self, project_id: str, run_id: str, make_active: bool = True) -> ProjectRecord:
         self._require_run(run_id)
         return self.project_store.attach_run(project_id, run_id, make_active=make_active)
+
+    def start_project_run(self, project_id: str, goal: str | None = None) -> str:
+        """Kick off a new simulated run for a project and attach it immediately."""
+        project = next(
+            (item for item in self.project_store.list_projects() if item.project_id == project_id),
+            None,
+        )
+        if project is None:
+            raise KeyError(f"Unknown project id: {project_id}")
+        effective_goal = (goal or project.thesis or project.title).strip()
+        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        run_id = self.runner.start_run(
+            project_id=project.project_id,
+            goal=effective_goal,
+        )
+        self.project_store.attach_run(project.project_id, run_id, make_active=True)
+        return run_id
+
+    def approve_stage(self, run_id: str, stage_slug: str) -> None:
+        self.runner.approve_stage(run_id, stage_slug)
+
+    def submit_stage_feedback(self, run_id: str, stage_slug: str, feedback: str) -> None:
+        if not feedback.strip():
+            raise ValueError("Feedback must not be empty.")
+        self.runner.submit_feedback(run_id, stage_slug, feedback)
+
+    def get_stage_session(self, run_id: str, stage_slug: str) -> dict[str, object]:
+        """Return per-stage interaction trace.
+
+        Tries our own session JSONL first, then falls back to parsing the real
+        runner's ``logs_raw.jsonl`` (Claude stream-json) so the Progress
+        Monitor on the Review page works for both runners.
+        """
+        paths = self._require_run(run_id)
+        events = read_events(paths.run_root, stage_slug)
+        if not events:
+            events = parse_real_session(paths.run_root, stage_slug)
+        return {
+            "run_id": run_id,
+            "stage_slug": stage_slug,
+            "event_count": len(events),
+            "events": events,
+        }
+
+    def list_run_sessions(self, run_id: str) -> dict[str, object]:
+        paths = self._require_run(run_id)
+        return {"run_id": run_id, "sessions": summarize_sessions(paths.run_root)}
 
     def list_run_ids(self) -> list[str]:
         if not self.runs_dir.exists():
@@ -399,9 +476,25 @@ class StudioService:
         )
 
     def get_stage_document(self, run_id: str, stage_slug: str) -> str:
+        """Return the markdown for a stage.
+
+        Falls back to the in-progress ``.tmp.md`` draft when the final stage
+        file doesn't exist yet (e.g. while the runner is mid-stage). This
+        lets the Studio show real Claude output as it's being written, and
+        keeps the Review page from breaking when the user lands on a stage
+        that's still running.
+        """
         paths = self._require_run(run_id)
         stage = _resolve_stage(stage_slug)
-        return read_text(paths.stage_file(stage))
+        final = paths.stage_file(stage)
+        if final.exists():
+            return read_text(final)
+        draft = paths.stage_tmp_file(stage)
+        if draft.exists():
+            return read_text(draft)
+        # Neither file exists yet — return an empty string instead of raising
+        # so the frontend can render a "stage hasn't produced output yet" state.
+        return ""
 
     def get_artifact_index(self, run_id: str) -> ArtifactIndex | None:
         paths = self._require_run(run_id)

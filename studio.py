@@ -1,4 +1,4 @@
-from src.studio_http import main
+from src.backend.studio_http import main
 
 
 if __name__ == "__main__":

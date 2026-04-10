@@ -153,15 +153,62 @@ def ensure_run_manifest(paths: RunPaths) -> RunManifest:
 def load_run_manifest(path) -> RunManifest | None:
     if not path.exists():
         return None
-    text = path.read_text(encoding="utf-8").strip()
-    if not text:
-        return None
-    return RunManifest.from_dict(json.loads(text))
+    # The file may be mid-write from a background runner thread. Retry a few
+    # times on empty / partial reads instead of silently returning None (which
+    # would trigger re-initialization and clobber in-flight progress).
+    last_error: Exception | None = None
+    for attempt in range(5):
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            last_error = exc
+            text = ""
+        if text:
+            try:
+                return RunManifest.from_dict(json.loads(text))
+            except json.JSONDecodeError as exc:
+                last_error = exc
+        if attempt < 4:
+            import time as _time
+
+            _time.sleep(0.02 * (attempt + 1))
+    if last_error is not None:
+        # File exists but is unreadable after retries — propagate so the
+        # caller can decide instead of re-initializing and losing state.
+        raise RuntimeError(
+            f"Failed to read run manifest at {path} after retries: {last_error}"
+        ) from last_error
+    return None
 
 
 def save_run_manifest(path, manifest: RunManifest) -> None:
+    """Atomically persist the manifest via tmp-file + os.replace.
+
+    Non-atomic write_text('w') caused mid-write reads in concurrent callers
+    (the Studio HTTP poller racing the background runner) to see an empty or
+    partial file and re-initialize it, corrupting state. Atomic rename
+    eliminates the window entirely.
+    """
+    import os
+    import tempfile
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(manifest.to_dict(), indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    payload = json.dumps(manifest.to_dict(), indent=2, ensure_ascii=True) + "\n"
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+            tmp_file.write(payload)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def format_manifest_status(manifest: RunManifest) -> str:

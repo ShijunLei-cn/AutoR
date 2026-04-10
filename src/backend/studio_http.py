@@ -36,6 +36,8 @@ def build_handler(service: StudioService, static_root: Path):
                 self._write_error(HTTPStatus.NOT_FOUND, str(exc))
             except ValueError as exc:
                 self._write_error(HTTPStatus.BAD_REQUEST, str(exc))
+            except RuntimeError as exc:
+                self._write_error(HTTPStatus.CONFLICT, str(exc))
             except Exception as exc:  # pragma: no cover - defensive
                 self._write_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
 
@@ -50,6 +52,32 @@ def build_handler(service: StudioService, static_root: Path):
 
             if path in {"/", "/studio", "/studio/"}:
                 self._serve_static_file(static_root / "index.html")
+                return
+
+            # New frontend modules shipped from src/frontend/ — checked BEFORE
+            # the generic /studio/ static handler so the ext prefix wins.
+            if path.startswith("/studio/ext/"):
+                relative = path[len("/studio/ext/"):]
+                ext_root = (Path(__file__).resolve().parent.parent / "frontend").resolve()
+                candidate = (ext_root / relative).resolve()
+                try:
+                    candidate.relative_to(ext_root)
+                except ValueError as exc:
+                    raise ValueError(f"Extension path escapes root: {path}") from exc
+                if not candidate.exists() or not candidate.is_file():
+                    raise FileNotFoundError(f"Extension asset not found: {relative}")
+                mime = guess_type(candidate.name)[0] or "application/octet-stream"
+                if candidate.suffix == ".js":
+                    mime = "application/javascript"
+                body = candidate.read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header(
+                    "Content-Type",
+                    f"{mime}; charset=utf-8" if mime.startswith("text/") or mime == "application/javascript" else mime,
+                )
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
                 return
 
             if path.startswith("/studio/"):
@@ -131,6 +159,16 @@ def build_handler(service: StudioService, static_root: Path):
                 self._write_json(HTTPStatus.OK, payload)
                 return
 
+            if len(parts) == 6 and parts[:2] == ["api", "runs"] and parts[3] == "stages" and parts[5] == "session":
+                payload = service.get_stage_session(parts[2], parts[4])
+                self._write_json(HTTPStatus.OK, payload)
+                return
+
+            if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "sessions":
+                payload = service.list_run_sessions(parts[2])
+                self._write_json(HTTPStatus.OK, payload)
+                return
+
             raise FileNotFoundError(f"Unknown route: {path}")
 
         def _dispatch_post(self) -> None:
@@ -161,6 +199,29 @@ def build_handler(service: StudioService, static_root: Path):
                     make_active=bool(payload.get("make_active", True)),
                 )
                 self._write_json(HTTPStatus.OK, studio_to_dict(project))
+                return
+
+            # POST /api/projects/{id}/runs/start  → launch a new simulated run
+            if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:5] == ["runs", "start"]:
+                goal = str(payload.get("goal") or "").strip() or None
+                run_id = service.start_project_run(parts[2], goal=goal)
+                self._write_json(HTTPStatus.CREATED, {"run_id": run_id, "project_id": parts[2]})
+                return
+
+            # POST /api/runs/{id}/stages/{slug}/approve  → advance past human review
+            if len(parts) == 6 and parts[:2] == ["api", "runs"] and parts[3] == "stages" and parts[5] == "approve":
+                service.approve_stage(parts[2], parts[4])
+                self._write_json(HTTPStatus.OK, {"run_id": parts[2], "stage_slug": parts[4], "action": "approved"})
+                return
+
+            # POST /api/runs/{id}/stages/{slug}/feedback  → re-run stage with feedback
+            if len(parts) == 6 and parts[:2] == ["api", "runs"] and parts[3] == "stages" and parts[5] == "feedback":
+                feedback = str(payload.get("feedback") or "").strip()
+                service.submit_stage_feedback(parts[2], parts[4], feedback)
+                self._write_json(
+                    HTTPStatus.OK,
+                    {"run_id": parts[2], "stage_slug": parts[4], "action": "feedback_submitted"},
+                )
                 return
 
             if len(parts) == 5 and parts[:2] == ["api", "runs"] and parts[3:5] == ["iterations", "plan"]:
@@ -240,9 +301,8 @@ def create_server(
         runs_dir=runs_dir,
         metadata_root=metadata_root,
     )
-    static_root = repo_root / "studio_web"
-    if not static_root.exists():
-        static_root = Path(__file__).resolve().parent.parent / "studio_web"
+    # src/backend/studio_http.py → src/frontend/static/
+    static_root = Path(__file__).resolve().parent.parent / "frontend" / "static"
     handler = build_handler(service, static_root=static_root)
     return ThreadingHTTPServer((host, port), handler)
 

@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AutoR Studio</title>
+    <link rel="stylesheet" href="/studio/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell" data-view="hub">
+      <header class="topbar">
+        <div class="topbar-lead">
+          <button id="back-to-hub" class="button button-ghost hub-only-hidden" type="button">← Projects</button>
+          <div>
+            <p class="eyebrow">AutoR Studio</p>
+            <h1>Research Control Workspace</h1>
+            <p class="topbar-copy">
+              Every project is human-in-the-loop. Pick a project to open its dedicated workspace for review, files, paper, and history.
+            </p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span id="connection-status" class="badge">Connecting</span>
+          <button id="reload-button" class="button button-secondary" type="button">Reload</button>
+        </div>
+      </header>
+
+      <!-- ============ HUB VIEW ============ -->
+      <main class="hub-view">
+        <section class="panel hub-create">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Start</p>
+              <h2>New Project</h2>
+            </div>
+            <span class="meta">Human-in-the-loop by default</span>
+          </div>
+          <div class="panel-body">
+            <form id="project-form" class="project-form project-form-inline">
+              <label>
+                <span>Title</span>
+                <input id="project-title" name="title" type="text" placeholder="Sparse MoE Study" required />
+              </label>
+              <label>
+                <span>Thesis</span>
+                <textarea
+                  id="project-thesis"
+                  name="thesis"
+                  rows="2"
+                  placeholder="Track routing, stability, and paper packaging."
+                  required
+                ></textarea>
+              </label>
+              <button class="button button-primary" type="submit">Create Project</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Projects</h2>
+            <span id="project-count" class="meta">0</span>
+          </div>
+          <div class="panel-body">
+            <div id="projects-list" class="projects-grid"></div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- ============ WORKSPACE VIEW ============ -->
+      <main class="workspace-view">
+        <section class="panel workspace-header">
+          <div class="workspace-header-body">
+            <div class="workspace-title">
+              <p id="active-project-label" class="eyebrow">No project selected</p>
+              <h2 id="run-title">No run selected</h2>
+              <p id="run-goal" class="workspace-goal">Select a run to inspect stage output, files, and manuscript artifacts.</p>
+            </div>
+            <div class="workspace-actions">
+              <span id="run-status" class="badge badge-status">Idle</span>
+            </div>
+          </div>
+          <nav class="page-nav" aria-label="Studio pages">
+            <button class="page-link is-active" data-page="overview" type="button">Overview</button>
+            <button class="page-link" data-page="review" type="button">Human Review</button>
+            <button class="page-link" data-page="files" type="button">Files</button>
+            <button class="page-link" data-page="paper" type="button">Paper</button>
+            <button class="page-link" data-page="history" type="button">Versions</button>
+          </nav>
+        </section>
+
+        <section id="page-overview" class="page is-active">
+          <div class="page-grid overview-grid">
+            <section class="panel panel-full live-panel">
+              <div class="panel-header">
+                <div class="live-header">
+                  <span id="live-indicator" class="live-dot" aria-hidden="true"></span>
+                  <div>
+                    <p class="eyebrow">Current run</p>
+                    <h2 id="live-stage-title">No run selected</h2>
+                  </div>
+                </div>
+                <span id="live-status-chip" class="status-chip status-idle">Idle</span>
+              </div>
+              <div class="panel-body">
+                <ol id="stage-strip" class="stage-strip" aria-label="Pipeline progress"></ol>
+                <div class="live-progress-row">
+                  <div class="live-progress">
+                    <div class="live-progress-label">
+                      <span id="live-progress-text">0 / 0 stages approved</span>
+                      <span id="live-attempt-text" class="meta"></span>
+                    </div>
+                    <div class="live-progress-bar">
+                      <div id="live-progress-fill" class="live-progress-fill"></div>
+                    </div>
+                  </div>
+                  <div class="live-actions">
+                    <button id="live-approve" class="button button-primary" type="button" disabled>
+                      ✅ Approve
+                    </button>
+                    <button id="live-feedback-quick" class="button button-secondary" type="button" disabled>
+                      ✍︎ Review
+                    </button>
+                  </div>
+                </div>
+                <p id="live-last-event" class="live-last-event">Waiting for activity…</p>
+                <ol id="live-ticker" class="live-ticker" aria-label="Recent runner events"></ol>
+              </div>
+            </section>
+
+            <section class="panel panel-full">
+              <div class="panel-header">
+                <h2>Project Thesis</h2>
+                <span id="project-meta" class="meta">No project</span>
+              </div>
+              <div class="panel-body">
+                <div id="project-brief" class="copy-block empty-state">
+                  Project context appears here after you select a project.
+                </div>
+              </div>
+            </section>
+
+            <section class="panel panel-full">
+              <div class="panel-header">
+                <h2>Activity</h2>
+                <span id="activity-count" class="meta">0 events</span>
+              </div>
+              <div class="panel-body">
+                <ol id="activity-feed" class="activity-feed"></ol>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Stage Rail</h2>
+                <span id="stage-count" class="meta">0</span>
+              </div>
+              <div class="panel-body">
+                <div id="stage-rail" class="stage-rail"></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Current focus</p>
+                  <h2 id="overview-stage-title">Stage snapshot</h2>
+                </div>
+                <span id="overview-stage-meta" class="meta"></span>
+              </div>
+              <div class="panel-body">
+                <article id="overview-stage-summary" class="document-body empty-state">
+                  Select a stage to inspect the current summary.
+                </article>
+              </div>
+            </section>
+
+            <section class="panel panel-full">
+              <div class="panel-header">
+                <h2>Run Summary</h2>
+                <span id="artifact-total" class="meta">0 artifacts</span>
+              </div>
+              <div class="panel-body split-stack">
+                <dl id="run-summary" class="summary-list"></dl>
+                <section class="inspector-block">
+                  <h3>Artifacts</h3>
+                  <ul id="artifact-summary" class="artifact-summary"></ul>
+                </section>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="page-review" class="page">
+          <!-- Pipeline state strip shared with Overview -->
+          <section class="panel panel-full review-strip-panel">
+            <ol id="review-stage-strip" class="stage-strip" aria-label="Pipeline progress"></ol>
+          </section>
+
+          <div class="page-grid review-grid">
+            <section class="panel">
+              <div class="panel-body review-body">
+
+                <!-- Hero: "You are reviewing X" — content + actions together -->
+                <section id="review-hero" class="review-hero">
+                  <div class="review-hero-head">
+                    <div>
+                      <p class="eyebrow">You are reviewing</p>
+                      <h2 id="review-hero-title">No stage selected</h2>
+                      <p id="review-hero-sub" class="review-hero-sub">Pick a run to inspect a stage.</p>
+                    </div>
+                    <span id="review-hero-chip" class="status-chip status-idle">idle</span>
+                  </div>
+
+                  <div id="review-hero-tldr" class="review-hero-tldr"></div>
+
+                  <ul id="review-hero-files" class="review-hero-files"></ul>
+
+                  <div class="hitl-actions">
+                    <button id="approve-stage-button" class="button button-primary" type="button">
+                      ✅ Approve &amp; Continue
+                    </button>
+                    <button id="send-feedback-button" class="button button-secondary" type="button">
+                      ✍︎ Send Feedback &amp; Re-run
+                    </button>
+                  </div>
+
+                  <label class="feedback-inline-label">
+                    <span>Your feedback (optional — used when you click Send Feedback &amp; Re-run)</span>
+                    <textarea
+                      id="iteration-feedback-quick"
+                      rows="3"
+                      placeholder="Tighten the claims, keep the previous experiment results, and revise the writing narrative."
+                    ></textarea>
+                  </label>
+                  <p id="review-next" class="review-next"></p>
+                </section>
+
+                <!-- The full stage markdown, prominent directly below the hero -->
+                <section class="review-doc-section">
+                  <header class="session-section-header">
+                    <h3 id="document-title">Stage document</h3>
+                    <span id="document-meta" class="meta"></span>
+                  </header>
+                  <p id="review-stage-label" class="eyebrow review-stage-label">Human Review</p>
+                  <article id="stage-document" class="document-body empty-state">
+                    Select a stage to inspect the human-readable summary.
+                  </article>
+                </section>
+
+                <!-- Previous approved stages accordion — see the full chain at any time -->
+                <section class="review-previous-section">
+                  <header class="session-section-header">
+                    <h3>Previous Stages</h3>
+                    <span id="review-previous-count" class="meta">0 approved</span>
+                  </header>
+                  <div id="review-previous-list" class="review-previous-list"></div>
+                </section>
+              </div>
+            </section>
+
+            <aside class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Live runner activity</p>
+                  <h2>Progress Monitor</h2>
+                </div>
+                <span id="session-event-count" class="meta">0 events</span>
+              </div>
+              <div class="panel-body split-stack">
+                <div id="review-progress-summary" class="review-progress-summary">
+                  <span class="live-dot"></span>
+                  <span id="review-progress-text">Waiting for activity…</span>
+                </div>
+
+                <section class="session-section">
+                  <div id="stage-session-view" class="session-container">
+                    <div class="session-empty">Pick a stage to see the interaction trace.</div>
+                  </div>
+                </section>
+
+                <section class="inspector-block">
+                  <h3>Review Checklist</h3>
+                  <ul id="reviewer-actions-primary" class="reviewer-checklist">
+                    <li>Scan <b>What I Did</b> — does it match the goal?</li>
+                    <li>Check <b>Key Results</b> — do they look sane?</li>
+                    <li>Open one or two <b>Files Produced</b> to confirm.</li>
+                    <li>If unsure, drop a note in the feedback box and Re-run.</li>
+                  </ul>
+                </section>
+
+                <details class="iteration-advanced">
+                  <summary>Advanced: manual iteration brief</summary>
+                  <p class="hitl-hint">
+                    Use this form only if you need to generate a structured execution brief for a specific scope (file, subtree, or manuscript). The two buttons above cover the common case.
+                  </p>
+
+                <form id="iteration-form" class="iteration-form">
+                  <label>
+                    <span>Mode</span>
+                    <select id="iteration-mode" name="mode">
+                      <option value="continue">Continue</option>
+                      <option value="redo">Redo</option>
+                      <option value="branch">Branch</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Stage</span>
+                    <select id="iteration-stage" name="base_stage_slug"></select>
+                  </label>
+                  <label>
+                    <span>Scope type</span>
+                    <select id="iteration-scope-type" name="scope_type">
+                      <option value="stage">Stage</option>
+                      <option value="file">File</option>
+                      <option value="subtree">Subtree</option>
+                      <option value="manuscript">Manuscript</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Scope value</span>
+                    <input
+                      id="iteration-scope-value"
+                      name="scope_value"
+                      type="text"
+                      placeholder="workspace/writing/sections/method.tex"
+                    />
+                  </label>
+                  <label>
+                    <span>Human feedback</span>
+                    <textarea
+                      id="iteration-feedback"
+                      name="user_feedback"
+                      rows="5"
+                      placeholder="Tighten the claims, keep the previous experiment results, and revise the writing narrative."
+                    ></textarea>
+                  </label>
+                  <button class="button button-primary" type="submit">Generate Execution Brief</button>
+                </form>
+
+                <section class="inspector-block">
+                  <h3>Reviewer Checklist</h3>
+                  <ul id="reviewer-actions" class="artifact-summary">
+                    <li>Pick a run and stage.</li>
+                    <li>Review the stage summary and artifacts.</li>
+                    <li>Generate an execution brief for the next iteration.</li>
+                  </ul>
+                </section>
+
+                <section class="inspector-block">
+                  <h3>Execution Brief</h3>
+                  <div id="iteration-plan" class="plan-output empty-state">No iteration brief generated yet.</div>
+                </section>
+                </details>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="page-files" class="page">
+          <div class="page-grid files-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Workspace browser</p>
+                  <h2>Read-only Files</h2>
+                </div>
+                <span class="meta">Editing stays outside the browser for now</span>
+              </div>
+              <div class="panel-body split-stack">
+                <div class="banner subtle">
+                  File editing is intentionally disabled in this first slice. The next integration step is handing files off to VS Code or Overleaf.
+                </div>
+                <div id="file-tree" class="file-tree"></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Inspector</p>
+                  <h2 id="file-preview-title">File preview</h2>
+                </div>
+                <span id="file-preview-meta" class="meta"></span>
+              </div>
+              <div class="panel-body split-stack">
+                <div class="pill-row">
+                  <span class="pill">Planned: VS Code handoff</span>
+                  <span class="pill">Planned: Overleaf handoff</span>
+                </div>
+                <div id="file-preview" class="document-body empty-state">
+                  Select a file from the workspace tree to preview it here.
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="page-paper" class="page">
+          <div class="page-grid paper-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Writing studio</p>
+                  <h2>Paper Preview</h2>
+                </div>
+                <span id="paper-status" class="meta">No PDF yet</span>
+              </div>
+              <div class="panel-body split-stack">
+                <div class="banner subtle">
+                  This page is preview-first: manuscript source, compiled PDF, and build log in one place. Editing and compile actions come next.
+                </div>
+                <div id="paper-frame-container" class="paper-frame-container empty-state">
+                  Select a run with writing artifacts to preview the paper.
+                </div>
+              </div>
+            </section>
+
+            <aside class="panel">
+              <div class="panel-header">
+                <h2>Manuscript Sources</h2>
+                <span id="paper-meta" class="meta"></span>
+              </div>
+              <div class="panel-body split-stack">
+                <dl id="paper-summary" class="summary-list"></dl>
+
+                <section class="inspector-block">
+                  <h3>Sections</h3>
+                  <ul id="paper-sections" class="artifact-summary"></ul>
+                </section>
+
+                <section class="inspector-block">
+                  <h3>Main TeX</h3>
+                  <div id="paper-tex-preview" class="document-body empty-state">No manuscript source found.</div>
+                </section>
+
+                <section class="inspector-block">
+                  <h3>Build log</h3>
+                  <div id="paper-build-log" class="document-body empty-state">No build log found.</div>
+                </section>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="page-history" class="page">
+          <div class="page-grid history-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Project versions</p>
+                  <h2>Derived Checkpoints</h2>
+                </div>
+                <span id="version-count" class="meta">0</span>
+              </div>
+              <div class="panel-body">
+                <div class="banner subtle">
+                  This first history slice is read-only. It derives checkpoints from the run manifest and approved stages before named milestones are wired in.
+                </div>
+                <div id="version-list" class="version-list"></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Checkpoint details</p>
+                  <h2 id="history-title">Version detail</h2>
+                </div>
+                <span id="history-meta" class="meta"></span>
+              </div>
+              <div class="panel-body split-stack">
+                <div id="history-summary" class="copy-block empty-state">
+                  Select a checkpoint to inspect its stage summary and changed artifacts.
+                </div>
+                <section class="inspector-block">
+                  <h3>Artifacts At This Checkpoint</h3>
+                  <ul id="history-artifacts" class="artifact-summary"></ul>
+                </section>
+                <section class="inspector-block">
+                  <h3>Stage Summary</h3>
+                  <article id="history-stage-preview" class="document-body empty-state">
+                    Select a checkpoint to preview its associated stage summary.
+                  </article>
+                </section>
+              </div>
+            </section>
+
+            <aside class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Execution trace</p>
+                  <h2>Timeline</h2>
+                </div>
+                <span id="trace-count" class="meta">0 events</span>
+              </div>
+              <div class="panel-body">
+                <div id="trace-timeline" class="trace-timeline"></div>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/studio/app.js" type="module"></script>
+  </body>
+</html>
