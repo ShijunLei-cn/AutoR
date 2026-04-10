@@ -928,21 +928,30 @@ class ResearchManager:
 
     def _run_stage(self, paths: RunPaths, stage: StageSpec) -> bool:
         attempt_no = read_attempt_count(paths, stage) + 1
+        loop_attempts = 0
         revision_feedback: str | None = None
         continue_session = False
         last_validation_errors: list[str] = []
         mark_stage_execution_started(paths, stage)
 
         while True:
-            if attempt_no > MAX_STAGE_ATTEMPTS:
+            if loop_attempts >= MAX_STAGE_ATTEMPTS:
+                error = (
+                    f"Exceeded {MAX_STAGE_ATTEMPTS} attempts in the current stage run. "
+                    f"Last validation errors: {'; '.join(last_validation_errors) or 'None recorded.'}"
+                )
                 self.ui.show_status(
-                    f"{stage.stage_title} failed after {MAX_STAGE_ATTEMPTS} attempts. Escalating to user.",
+                    f"{stage.stage_title} failed after {MAX_STAGE_ATTEMPTS} attempts in this run.",
                     level="error",
                 )
-                append_log_entry(paths.logs, f"{stage.slug} max_attempts_exceeded",
-                                 f"Stopped after {MAX_STAGE_ATTEMPTS} attempts. "
-                                 f"Last errors: {last_validation_errors}")
+                append_log_entry(
+                    paths.logs,
+                    f"{stage.slug} max_attempts_exceeded",
+                    error,
+                )
+                mark_stage_failed_manifest(paths, stage, error)
                 return False
+            loop_attempts += 1
             mark_stage_running_manifest(paths, stage, attempt_no)
             write_attempt_count(paths, stage, attempt_no)
             self._print(f"\nRunning {stage.stage_title} (attempt {attempt_no})...")

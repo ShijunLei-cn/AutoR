@@ -12,15 +12,15 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.manager import ResearchManager
+from src.manifest import load_run_manifest
 from src.operator import ClaudeOperator
 from src.terminal_ui import TerminalUI
 from src.utils import (
     MAX_STAGE_ATTEMPTS,
     STAGES,
-    StageSpec,
     build_continuation_prompt,
     build_run_paths,
     create_run_root,
@@ -151,20 +151,85 @@ class TestRunStageMaxAttempts(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_run_stage_returns_false_after_max_attempts(self):
-        """Simulate a stage that always produces invalid output.
+    def _write_valid_stage_draft(self, stage) -> Path:
+        produced = self.paths.notes_dir / f"{stage.slug}_note.md"
+        produced.parent.mkdir(parents=True, exist_ok=True)
+        produced.write_text("note", encoding="utf-8")
+        draft_path = self.paths.stage_tmp_file(stage)
+        draft_path.write_text(
+            "\n".join(
+                [
+                    f"# {stage.stage_title}",
+                    "",
+                    "## Objective",
+                    "Complete the stage.",
+                    "",
+                    "## Previously Approved Stage Summaries",
+                    "_None yet._",
+                    "",
+                    "## What I Did",
+                    "Did the required work.",
+                    "",
+                    "## Key Results",
+                    "Obtained a concrete result.",
+                    "",
+                    "## Files Produced",
+                    f"- `workspace/notes/{stage.slug}_note.md` - Supporting note",
+                    "",
+                    "## Suggestions for Refinement",
+                    "1. Tighten the scope.",
+                    "2. Strengthen the evidence.",
+                    "3. Clarify the assumptions.",
+                    "",
+                    "## Your Options",
+                    "1. Use suggestion 1",
+                    "2. Use suggestion 2",
+                    "3. Use suggestion 3",
+                    "4. Refine with your own feedback",
+                    "5. Approve and continue",
+                    "6. Abort",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return draft_path
 
-        We patch the attempt counter to start just below the limit so the
-        loop hits the ceiling quickly without running MAX_STAGE_ATTEMPTS
-        real fake-operator calls.
-        """
+    def test_run_stage_uses_fresh_window_despite_historical_attempt_count(self):
         from src.utils import write_attempt_count
         stage = STAGES[0]
-        # Set attempt counter so next attempt_no = MAX_STAGE_ATTEMPTS + 1
         write_attempt_count(self.paths, stage, MAX_STAGE_ATTEMPTS)
+        draft_path = self._write_valid_stage_draft(stage)
+        self.operator.run_stage = MagicMock(
+            return_value=MagicMock(
+                success=True,
+                exit_code=0,
+                session_id="session-1",
+                stage_file_path=draft_path,
+                stdout="",
+                stderr="",
+            )
+        )
+        self.manager._display_stage_output = MagicMock()
+        self.manager._ask_choice = MagicMock(return_value="5")
 
         result = self.manager._run_stage(self.paths, stage)
+        self.assertTrue(result)
+        self.operator.run_stage.assert_called_once()
+        self.assertTrue(self.paths.stage_file(stage).exists())
+
+    def test_run_stage_marks_manifest_failed_when_attempt_window_is_exhausted(self):
+        stage = STAGES[0]
+
+        with patch("src.manager.MAX_STAGE_ATTEMPTS", 0):
+            result = self.manager._run_stage(self.paths, stage)
+
         self.assertFalse(result)
+        manifest = load_run_manifest(self.paths.run_manifest)
+        self.assertIsNotNone(manifest)
+        stage_entry = next(entry for entry in manifest.stages if entry.slug == stage.slug)
+        self.assertEqual(stage_entry.status, "failed")
+        self.assertIn("Exceeded 0 attempts", stage_entry.last_error or "")
 
 
 if __name__ == "__main__":
