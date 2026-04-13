@@ -1443,6 +1443,15 @@ def canonicalize_stage_markdown(
 
     suggestion_items = suggestion_items[:3]
 
+    decision_ledger = extract_markdown_section(markdown, "Decision Ledger")
+    if not decision_ledger:
+        decision_ledger = (
+            "- **Open Questions**: (auto-filled by canonicalization — review before approving)\n"
+            "- **Locked Decisions**: None recorded in this attempt.\n"
+            "- **Assumptions**: None explicitly stated.\n"
+            "- **Rejected Alternatives**: None recorded."
+        )
+
     return (
         f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
         "## Objective\n\n"
@@ -1455,6 +1464,8 @@ def canonicalize_stage_markdown(
         f"{key_results.strip()}\n\n"
         "## Files Produced\n\n"
         f"{files_produced.strip()}\n\n"
+        "## Decision Ledger\n\n"
+        f"{decision_ledger.strip()}\n\n"
         "## Suggestions for Refinement\n"
         f"1. {suggestion_items[0].strip()}\n"
         f"2. {suggestion_items[1].strip()}\n"

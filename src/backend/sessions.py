@@ -105,14 +105,15 @@ def read_events(run_root: Path, stage_slug: str) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     events: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
     return events
 
 
@@ -125,9 +126,10 @@ def summarize_sessions(run_root: Path) -> dict[str, int]:
     for path in sorted(d.glob("*.jsonl")):
         slug = path.stem
         count = 0
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                count += 1
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    count += 1
         out[slug] = count
     return out
 
@@ -145,13 +147,8 @@ def summarize_sessions(run_root: Path) -> dict[str, int]:
 def parse_real_session(run_root: Path, stage_slug: str) -> list[dict[str, Any]]:
     """Parse runs/{id}/logs_raw.jsonl and return events for one stage.
 
-    Each line in logs_raw.jsonl is one of:
-        - ``{"_meta": {"stage": "...", "mode": "real_start", "command": [...]}}``
-            — marks the boundary of a stage attempt; we use it to filter
-        - Claude stream-json events: ``{"type": "system" | "assistant" | "user" | "result", ...}``
-
-    The output matches the shape consumed by the front-end's
-    ``session_viewer.js`` ES module.
+    Streams the file line-by-line to avoid loading the entire (potentially
+    100+ MB) log into memory on every poll tick.
     """
     raw_path = run_root / "logs_raw.jsonl"
     if not raw_path.exists():
@@ -161,129 +158,123 @@ def parse_real_session(run_root: Path, stage_slug: str) -> list[dict[str, Any]]:
     in_stage = False
     attempt = 1
     try:
-        for line in raw_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+        with raw_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
-            # Stage boundary markers
-            if "_meta" in rec:
-                meta = rec["_meta"]
-                meta_stage = meta.get("stage", "")
-                if meta_stage == stage_slug:
-                    in_stage = True
-                    attempt = int(meta.get("attempt", 1) or 1)
+                if "_meta" in rec:
+                    meta = rec["_meta"]
+                    meta_stage = meta.get("stage", "")
+                    if meta_stage == stage_slug:
+                        in_stage = True
+                        attempt = int(meta.get("attempt", 1) or 1)
+                        events.append({
+                            "ts": _now_iso(),
+                            "kind": "stage_start",
+                            "stage_slug": stage_slug,
+                            "attempt": attempt,
+                            "content": (
+                                f"Starting {stage_slug} (attempt {attempt}). "
+                                f"Command: {' '.join(meta.get('command', [])[:3])}…"
+                            ),
+                        })
+                    else:
+                        in_stage = False
+                    continue
+
+                if not in_stage:
+                    continue
+
+                kind = rec.get("type", "")
+                sub = rec.get("subtype", "")
+
+                if kind == "system" and sub == "init":
+                    model = rec.get("model", "")
+                    tools = rec.get("tools", [])
                     events.append({
                         "ts": _now_iso(),
-                        "kind": "stage_start",
+                        "kind": "system",
                         "stage_slug": stage_slug,
                         "attempt": attempt,
-                        "content": f"Starting {stage_slug} (attempt {attempt}). "
-                                   f"Claude command: {' '.join(meta.get('command', [])[:3])}…",
+                        "content": (
+                            f"Session initialized. Model: {model}. "
+                            f"Tools: {', '.join(tools[:6])}{'…' if len(tools) > 6 else ''}"
+                        ),
                     })
-                else:
-                    in_stage = False
-                continue
-
-            if not in_stage:
-                continue
-
-            kind = rec.get("type", "")
-            sub = rec.get("subtype", "")
-
-            if kind == "system" and sub == "init":
-                model = rec.get("model", "")
-                tools = rec.get("tools", [])
-                events.append({
-                    "ts": _now_iso(),
-                    "kind": "system",
-                    "stage_slug": stage_slug,
-                    "attempt": attempt,
-                    "content": f"Claude session initialized. Model: {model}. "
-                               f"Tools: {', '.join(tools[:6])}{'…' if len(tools) > 6 else ''}",
-                })
-                continue
-
-            if kind == "assistant" and "message" in rec:
-                content_list = rec["message"].get("content", [])
-                if not isinstance(content_list, list):
                     continue
-                for block in content_list:
-                    btype = block.get("type")
-                    if btype == "text":
-                        text = block.get("text", "")
-                        if text.strip():
+
+                if kind == "assistant" and "message" in rec:
+                    for block in rec["message"].get("content", []):
+                        if not isinstance(block, dict):
+                            continue
+                        btype = block.get("type")
+                        if btype == "text" and block.get("text", "").strip():
                             events.append({
                                 "ts": _now_iso(),
                                 "kind": "assistant",
                                 "stage_slug": stage_slug,
                                 "attempt": attempt,
-                                "content": text.strip()[:600],
+                                "content": block["text"].strip()[:600],
                             })
-                    elif btype == "thinking":
-                        thinking = block.get("thinking", "")
-                        if thinking.strip():
+                        elif btype == "thinking" and block.get("thinking", "").strip():
                             events.append({
                                 "ts": _now_iso(),
                                 "kind": "assistant",
                                 "stage_slug": stage_slug,
                                 "attempt": attempt,
-                                "content": "💭 " + thinking.strip()[:500],
+                                "content": "💭 " + block["thinking"].strip()[:500],
                             })
-                    elif btype == "tool_use":
-                        events.append({
-                            "ts": _now_iso(),
-                            "kind": "tool_use",
-                            "stage_slug": stage_slug,
-                            "attempt": attempt,
-                            "tool": {
-                                "name": block.get("name", ""),
-                                "input": _shrink_tool_input(block.get("input", {})),
-                            },
-                        })
-                continue
-
-            if kind == "user" and "message" in rec:
-                content_list = rec["message"].get("content", [])
-                if not isinstance(content_list, list):
+                        elif btype == "tool_use":
+                            events.append({
+                                "ts": _now_iso(),
+                                "kind": "tool_use",
+                                "stage_slug": stage_slug,
+                                "attempt": attempt,
+                                "tool": {
+                                    "name": block.get("name", ""),
+                                    "input": _shrink_tool_input(block.get("input", {})),
+                                },
+                            })
                     continue
-                for block in content_list:
-                    if block.get("type") == "tool_result":
-                        result = block.get("content", "")
-                        # tool_result content can be a string or a list of blocks
-                        if isinstance(result, list):
-                            text_parts = []
-                            for r in result:
-                                if isinstance(r, dict) and r.get("type") == "text":
-                                    text_parts.append(r.get("text", ""))
-                                elif isinstance(r, str):
-                                    text_parts.append(r)
-                            result = "\n".join(text_parts)
-                        result = str(result)[:800]
-                        events.append({
-                            "ts": _now_iso(),
-                            "kind": "tool_result",
-                            "stage_slug": stage_slug,
-                            "attempt": attempt,
-                            "output": result,
-                        })
-                continue
 
-            if kind == "result":
-                events.append({
-                    "ts": _now_iso(),
-                    "kind": "stage_end",
-                    "stage_slug": stage_slug,
-                    "attempt": attempt,
-                    "content": f"Stage attempt {attempt} complete. Outcome: {sub or 'success'}.",
-                })
-                continue
+                if kind == "user" and "message" in rec:
+                    for block in rec["message"].get("content", []):
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") == "tool_result":
+                            result = block.get("content", "")
+                            if isinstance(result, list):
+                                parts = []
+                                for r in result:
+                                    if isinstance(r, dict) and r.get("type") == "text":
+                                        parts.append(r.get("text", ""))
+                                    elif isinstance(r, str):
+                                        parts.append(r)
+                                result = "\n".join(parts)
+                            events.append({
+                                "ts": _now_iso(),
+                                "kind": "tool_result",
+                                "stage_slug": stage_slug,
+                                "attempt": attempt,
+                                "output": str(result)[:800],
+                            })
+                    continue
+
+                if kind == "result":
+                    events.append({
+                        "ts": _now_iso(),
+                        "kind": "stage_end",
+                        "stage_slug": stage_slug,
+                        "attempt": attempt,
+                        "content": f"Stage attempt {attempt} complete. Outcome: {sub or 'success'}.",
+                    })
     except Exception:
-        # Defensive: never crash the API on a malformed line.
         pass
 
     return events

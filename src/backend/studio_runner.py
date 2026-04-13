@@ -327,7 +327,7 @@ class StudioRunner:
                 return
             control.gate.wait(timeout=1.0)
         action = control.action or "5"
-        control.command = ""
+        control.action = ""
 
         if action == "5":
             # APPROVE: promote draft → final, mark approved, append memory.
@@ -338,11 +338,18 @@ class StudioRunner:
                     shutil.copyfile(draft_path, final_path)
                 except Exception:
                     pass
-            stage_markdown = read_text(final_path) if final_path.exists() else read_text(draft_path)
-            try:
-                append_approved_stage_summary(paths.memory, gate_stage_spec, stage_markdown)
-            except Exception:
-                pass
+            # Defensive: read whichever file exists; fall back to empty if both
+            # are somehow missing (corrupted on-disk state).
+            stage_markdown = ""
+            if final_path.exists():
+                stage_markdown = read_text(final_path)
+            elif draft_path.exists():
+                stage_markdown = read_text(draft_path)
+            if stage_markdown:
+                try:
+                    append_approved_stage_summary(paths.memory, gate_stage_spec, stage_markdown)
+                except Exception:
+                    pass
             mark_stage_approved_manifest(
                 paths,
                 gate_stage_spec,
