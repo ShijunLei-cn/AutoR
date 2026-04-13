@@ -144,6 +144,44 @@ class ScriptedSmokeOperator:
                 write_text(path, content)
                 produced.append(relative_to_run(path, paths.run_root))
 
+        if stage.slug == "01_literature_survey":
+            sources_path = paths.literature_dir / "sources.json"
+            claims_path = paths.literature_dir / "claims.json"
+            write_text(
+                sources_path,
+                json.dumps(
+                    {
+                        "sources": [
+                            {
+                                "source_id": "S1",
+                                "title": "Smoke literature source",
+                                "path": "workspace/notes/01_literature_survey_smoke_note.md",
+                            }
+                        ]
+                    }
+                ),
+            )
+            write_text(
+                claims_path,
+                json.dumps(
+                    {
+                        "claims": [
+                            {
+                                "claim_id": "CL1",
+                                "statement": "Smoke literature review produced a traceable source ledger.",
+                                "source_ids": ["S1"],
+                            }
+                        ]
+                    }
+                ),
+            )
+            produced.extend(
+                [
+                    relative_to_run(sources_path, paths.run_root),
+                    relative_to_run(claims_path, paths.run_root),
+                ]
+            )
+
         note_path = paths.notes_dir / f"{stage.slug}_smoke_note.md"
         write_text(note_path, f"# Smoke Note\n\nStage: {stage.slug}\nInvocation: {invocation}\n")
         produced.append(relative_to_run(note_path, paths.run_root))
@@ -195,7 +233,20 @@ class ScriptedSmokeOperator:
             write_text(paths.artifacts_dir / "build_log.txt", "Final status: SUCCESS\n")
             write_text(
                 paths.artifacts_dir / "citation_verification.json",
-                json.dumps({"overall_status": "pass", "total_citations": 1}),
+                json.dumps(
+                    {
+                        "overall_status": "pass",
+                        "total_citations": 1,
+                        "verified_citations": 1,
+                        "unresolved_citations": 0,
+                        "claim_coverage": [
+                            {
+                                "claim": "Smoke writing claim",
+                                "citation_keys": ["smoke2026"],
+                            }
+                        ],
+                    }
+                ),
             )
             write_text(
                 paths.artifacts_dir / "self_review.json",

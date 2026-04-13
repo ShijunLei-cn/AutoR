@@ -765,6 +765,12 @@ def validate_stage_artifacts(stage: StageSpec, paths: RunPaths) -> list[str]:
     problems: list[str] = []
     freshness_cutoff = stage_execution_started_at(paths, stage)
 
+    if stage.number == 1:
+        from .evidence_ledger import validate_literature_evidence
+
+        for problem in validate_literature_evidence(paths):
+            problems.append(f"{stage.stage_title}: {problem}")
+
     if stage.number >= 3:
         if _count_files_with_suffixes(paths.data_dir, MACHINE_DATA_SUFFIXES) == 0:
             problems.append(
@@ -845,6 +851,11 @@ def validate_stage_artifacts(stage: StageSpec, paths: RunPaths) -> list[str]:
             problems.append(
                 f"{stage.stage_title} requires citation_verification.json under workspace/artifacts."
             )
+        else:
+            from .evidence_ledger import validate_citation_verification
+
+            for problem in validate_citation_verification(paths.artifacts_dir / "citation_verification.json"):
+                problems.append(f"{stage.stage_title}: {problem}")
 
         if not (paths.artifacts_dir / "self_review.json").exists():
             problems.append(
