@@ -405,10 +405,12 @@ function startPolling() {
       stopPolling();
       return;
     }
-    console.log("[poll] tick runId=", state.selectedRunId, "status=", status);
     void loadRun(state.selectedRunId).catch((err) => console.warn("[poll] loadRun failed", err));
-  }, 800);
-  console.log("[poll] started");
+  }, 3000);
+  // Poll every 3s instead of 800ms to avoid memory pressure on low-RAM machines.
+  // Each tick fires 7 API calls (summary, artifacts, tree, paper, history,
+  // stage doc, session). At 800ms that was ~9 req/s and caused swap death
+  // spirals on 8 GB Macs.
 }
 // Expose a tiny debug surface so the drive harness can introspect.
 if (typeof window !== "undefined") {
