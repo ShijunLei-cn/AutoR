@@ -9,6 +9,7 @@ Turn the approved problem framing, method, evidence, and analysis into a submiss
 ## Your Responsibilities
 
 - Draft paper-ready LaTeX grounded in the actual approved outputs and real workspace artifacts.
+- Distinguish verified empirical findings from provisional Stage 02 paper claims. Do not present provisional claims as confirmed results.
 - Use the strongest validated narrative from prior stages instead of writing generic background-heavy prose.
 - Verify that citations, figures, tables, and claims are internally consistent.
 - Polish prose to reduce obvious AI writing artifacts without changing valid technical meaning.
