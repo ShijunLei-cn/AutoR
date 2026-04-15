@@ -262,6 +262,17 @@ If `--venue` is omitted, AutoR defaults to `neurips_2025`.
 
 Valid stage identifiers include `03`, `3`, and `03_study_design`.
 
+## 🗓️ Changelog
+
+Recent mainline updates are tracked here so new users can quickly see what changed without digging through commits.
+
+| Date | Major updates |
+| --- | --- |
+| 2026-04-15 | Added minimal `--operator codex` support alongside Claude, persisted the selected execution backend in `run_config.json`, and improved terminal rendering for backend JSON streams. |
+| 2026-04-13 | Added literature evidence ledgers and citation verification outputs, introduced typed hypothesis manifests, hardened experiment manifest parsing, and added regression coverage for research diagram injection. |
+| 2026-04-10 | Added a decision ledger for human approvals and refined the public showcase gallery so research artifacts are presented more clearly. |
+| 2026-04-08 | Documented optional `--research-diagram` dependencies and tightened the README positioning around human-centered, artifact-backed research execution. |
+
 ## ⚙️ How It Works
 
 AutoR uses an optional intake step followed by a fixed 8-stage pipeline:
