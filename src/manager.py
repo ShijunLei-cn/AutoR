@@ -52,7 +52,7 @@ from .manifest import (
     sync_stage_session_id,
     update_manifest_run_status,
 )
-from .operator import ClaudeOperator
+from .operator_protocol import OperatorProtocol
 from .diagram_gen import post_writing_diagram_hook
 from .terminal_ui import TerminalUI
 from .platform.foundry import generate_paper_package, generate_release_package
@@ -106,7 +106,7 @@ class ResearchManager:
         self,
         project_root: Path,
         runs_dir: Path,
-        operator: ClaudeOperator,
+        operator: OperatorProtocol,
         output_stream: TextIO = sys.stdout,
         ui: TerminalUI | None = None,
     ) -> None:
@@ -178,7 +178,12 @@ class ResearchManager:
         self._research_diagram = research_diagram
         paths = build_run_paths(run_root)
         ensure_run_layout(paths)
-        config = ensure_run_config(paths, model=self.operator.model, venue=venue)
+        config = ensure_run_config(
+            paths,
+            model=self.operator.model,
+            venue=venue,
+            operator=getattr(self.operator, "backend_name", "claude"),
+        )
         ensure_run_manifest(paths)
         if not paths.user_input.exists():
             raise FileNotFoundError(f"Missing user_input.txt in run: {run_root}")
@@ -259,7 +264,12 @@ class ResearchManager:
             intake_summary = format_intake_for_prompt(ctx)
 
         initialize_memory(paths, user_goal, intake_summary=intake_summary)
-        config = initialize_run_config(paths, model=self.operator.model, venue=venue)
+        config = initialize_run_config(
+            paths,
+            model=self.operator.model,
+            venue=venue,
+            operator=getattr(self.operator, "backend_name", "claude"),
+        )
         initialize_run_manifest(paths)
         write_artifact_index(paths)
         write_experiment_manifest(paths)

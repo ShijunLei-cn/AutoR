@@ -62,6 +62,7 @@ class UtilsContractTests(unittest.TestCase):
         second = load_run_config(paths)
 
         self.assertEqual(first["created_at"], second["created_at"])
+        self.assertEqual(second["operator"], "claude")
 
     def test_stage3_validation_requires_current_execution_data(self) -> None:
         paths = self._build_paths()

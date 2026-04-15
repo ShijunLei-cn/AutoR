@@ -236,7 +236,7 @@ AI handles execution load; humans steer the research when direction actually mat
 ### Prerequisites
 
 - Python 3.10+
-- Claude CLI available on `PATH` for real runs
+- Claude CLI or Codex CLI available on `PATH` for real runs
 - Local TeX tools are helpful for Stage 07, but not required for smoke tests
 - For `--research-diagram` (Gemini-generated method illustration inserted into the LaTeX paper):
   - `pip install google-genai` (the `google.genai` SDK is **not** a default dependency; if it is missing the diagram step prints `Diagram generation failed: No module named 'google'` and the rest of the run continues unaffected)
@@ -249,8 +249,10 @@ AI handles execution load; humans steer the research when direction actually mat
 | Start a new run | `python main.py` |
 | Start with an explicit goal | `python main.py --goal "Your research goal here"` |
 | Start with preloaded resources | `python main.py --goal "Your research goal here" --resources paper.pdf refs.bib data.csv` |
-| Run a local smoke test without Claude | `python main.py --fake-operator --goal "Smoke test"` |
-| Choose a Claude model | `python main.py --model sonnet` or `python main.py --model opus` |
+| Run a local smoke test without a real agent backend | `python main.py --fake-operator --goal "Smoke test"` |
+| Choose the execution backend | `python main.py --operator claude` or `python main.py --operator codex` |
+| Choose a Claude model | `python main.py --operator claude --model sonnet` or `python main.py --operator claude --model opus` |
+| Start with Codex | `python main.py --operator codex --model default --goal "Your research goal here"` |
 | Choose a writing venue profile | `python main.py --venue neurips_2025` or `python main.py --venue nature` or `python main.py --venue jmlr` |
 | Resume the latest run | `python main.py --resume-run latest` |
 | Redo a stage inside the same run | `python main.py --resume-run 20260329_210252 --redo-stage 03` |
@@ -446,7 +448,7 @@ For each stage attempt, AutoR assembles a prompt from:
 7. optional refinement feedback
 8. for continuation attempts, the current draft/final stage files and workspace context
 
-The assembled prompt is written to `runs/<run_id>/prompt_cache/`, per-stage session IDs are stored in `runs/<run_id>/operator_state/`, and Claude is invoked in live streaming mode.
+The assembled prompt is written to `runs/<run_id>/prompt_cache/`, per-stage session IDs are stored in `runs/<run_id>/operator_state/`, and the selected CLI backend is invoked in live streaming mode.
 
 <details>
 <summary><strong>Exact Claude CLI pattern</strong></summary>
@@ -480,7 +482,7 @@ claude --model <model> \
 Important behavior:
 
 - refinement attempts reuse the same stage conversation whenever possible
-- streamed Claude output is shown live in the terminal
+- streamed agent output is shown live in the terminal
 - raw stream-json output is captured in `logs_raw.jsonl`
 - if resume fails, AutoR can fall back to a fresh session
 - if stage markdown is incomplete, AutoR can repair or normalize it locally
@@ -520,7 +522,8 @@ File boundaries:
 
 - [main.py](main.py): CLI entry point. Starts a new run, resumes an existing run, collects resources, and exposes redo/rollback controls.
 - [src/manager.py](src/manager.py): Owns intake plus the 8-stage loop, approval flow, repair flow, resume/redo/rollback logic, and stage-level continuation policy.
-- [src/operator.py](src/operator.py): Invokes Claude CLI, streams output live, persists stage session state, resumes the same stage conversation for refinement, and falls back to a fresh session if resume fails.
+- [src/operator.py](src/operator.py): The shared CLI operator flow used by Claude today and reused by Codex support for stage session state, live streaming, and resume fallback.
+- [src/operator_codex.py](src/operator_codex.py): Codex CLI adapter over the same stage contract, including JSON event streaming and stage-local session continuation.
 - [src/intake.py](src/intake.py): Resource ingestion, intake context persistence, and prompt formatting for preloaded materials.
 - [src/manifest.py](src/manifest.py): Lightweight run lifecycle state, stage status tracking, and rollback/stale invalidation.
 - [src/artifact_index.py](src/artifact_index.py): Run-wide artifact indexing over data, results, and figures.
