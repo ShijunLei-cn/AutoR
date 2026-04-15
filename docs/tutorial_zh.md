@@ -404,6 +404,118 @@ python main.py \
 
 所以如果你已经有一个小型代码仓库、一个数据目录，或者一整包阅读材料，可以直接整体喂进去，不必手工拆散。
 
+### 7.4 如果你需要教 AutoR 某种“技能”，应该怎么做
+
+实际使用里，经常会遇到这种情况：
+
+- 你们实验室有自己的 GPU 提交方式，比如 `rjob`
+- 你们有固定的数据预处理脚本
+- 你们有内部 benchmark 运行规范
+- 你们有固定的论文组织方式、结果落盘路径、命名规范
+
+这时候最重要的一条原则是：
+
+**不要只口头说一句“请学会这个技能”。要把它变成可执行的 playbook。**
+
+最有效的做法是把这类技能整理成一组资源，再交给 AutoR：
+
+- 一份说明文档，例如 `rjob_guide.md`
+- 一个或多个命令模板或脚本，例如 `submit_rjob.sh`
+- 一个成功过的示例配置
+- 环境说明，例如 conda 环境、模块加载方式、数据路径、输出路径
+- 一份真实成功日志或结果样例
+
+也就是说，你真正要教给 AutoR 的不是一句话，而是一套：
+
+- 规则
+- 示例
+- 模板
+- 成功案例
+
+### 7.5 这类技能应该在什么时候喂给 AutoR
+
+最推荐的方式有三种：
+
+1. 直接用交互式启动 `python main.py`，在资源导入环节把这些文件或目录加进去
+2. 用 `--resources` 把 playbook 目录直接传进去
+3. 如果这是一个长期稳定的项目规范，就把它放进项目仓库里，再用 `--project-root`
+
+如果这套规范你会反复使用，最稳妥的办法通常是维护一个长期目录，例如：
+
+```text
+lab_playbooks/
+  rjob/
+  slurm/
+  data_prep/
+  eval_rules/
+```
+
+之后每次运行时，把其中相关目录作为资源带进去。
+
+### 7.6 光给资源还不够，还要把硬约束写进目标
+
+如果某些要求是必须遵守的，不要只寄希望于 AutoR 自己推断。
+
+要把它们明确写进目标或反馈里。
+
+例如：
+
+```text
+Use the provided rjob workflow for all non-trivial training and evaluation.
+Local runs are only allowed for smoke tests under 5 minutes.
+All real experiments must be submitted through rjob to GPU nodes.
+Save job scripts, job IDs, logs, and machine-readable results into the run workspace.
+```
+
+这类写法很有效，因为它同时明确了：
+
+- 什么必须做
+- 什么不能做
+- 真正合格的产物应该是什么
+
+### 7.7 在哪些 stage 检查“它有没有真的学会”
+
+这类技能最适合在下面几个阶段强制检查：
+
+- `00_intake`：它是否真正理解了这套规范和约束
+- `03_study_design`：实验计划里有没有把这套执行方式写清楚
+- `04_implementation`：有没有真正写出可复用的脚本、配置和运行方法
+- `05_experimentation`：有没有真的按规范执行，而不是偷偷本地糊弄一下
+
+以 `rjob` 为例，到了 `Stage 04/05`，你应该至少看到：
+
+- 可复用的提交脚本
+- 真实 job 配置
+- job ID 或提交记录
+- 运行日志
+- 机器可读结果文件
+
+如果没有这些，通常就不应该 approve。
+
+### 7.8 一个很实用的返工反馈模板
+
+如果你发现 AutoR 没有按你教的集群规范来做，可以直接用这种反馈：
+
+```text
+Do not continue with local-only experiments.
+Use the provided rjob workflow to submit real GPU jobs.
+Create reusable submission scripts and save the submit command, job config, job IDs, logs, and machine-readable results under workspace/code and workspace/results.
+Local execution is only for smoke tests.
+```
+
+### 7.9 不要怎么教
+
+下面这些做法通常不够好：
+
+- 只说一句“请学会 rjob”
+- 只贴一个命令，没有上下文
+- 只告诉它“用 GPU”，但不说怎么提交、结果放哪、怎样算成功
+- 不在审批里检查它是否真的遵守了规范
+
+一句话总结：
+
+**如果你希望 AutoR 学会某种技能，就把它包装成可执行资源，并在关键 stage 用人工审批强制它真的按这套资源做事。**
+
 ---
 
 ## 8. AutoR 会怎么运行

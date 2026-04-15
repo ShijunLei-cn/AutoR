@@ -413,6 +413,118 @@ One more practical detail:
 
 So if you already have a small code repo, a data folder, or a bundle of reading materials, you can ingest the whole thing instead of splitting it manually.
 
+### 7.4 If You Need to Teach AutoR a Specific "Skill"
+
+In real usage, this happens often:
+
+- your lab has its own GPU submission flow such as `rjob`
+- you have a fixed data preprocessing pipeline
+- you have internal benchmark rules
+- you have a standard paper organization style, output layout, or naming convention
+
+The key principle is:
+
+**do not try to teach that skill with a single sentence. Turn it into an executable playbook.**
+
+The most effective pattern is to package that skill as resources and give those resources to AutoR:
+
+- a written guide, such as `rjob_guide.md`
+- one or more command templates or scripts, such as `submit_rjob.sh`
+- a known-good example config
+- environment notes, such as conda environments, module loads, data paths, and output paths
+- one real successful log or result example
+
+In other words, what you should give AutoR is not a vague instruction. It is a combination of:
+
+- rules
+- examples
+- templates
+- successful cases
+
+### 7.5 When to Provide Those Skill Resources
+
+There are three especially practical ways to do it:
+
+1. start with `python main.py` and add those files or directories during the interactive resource import step
+2. pass the playbook directory through `--resources`
+3. if the workflow is part of a long-lived project, keep it in the repo and use `--project-root`
+
+If you expect to reuse the same operational knowledge repeatedly, a stable directory layout is usually best. For example:
+
+```text
+lab_playbooks/
+  rjob/
+  slurm/
+  data_prep/
+  eval_rules/
+```
+
+Then include the relevant directory in each run.
+
+### 7.6 Resources Alone Are Not Enough: Put Hard Constraints in the Goal
+
+If some rules are mandatory, do not rely on AutoR to infer them implicitly.
+
+State them directly in the goal or in approval feedback.
+
+For example:
+
+```text
+Use the provided rjob workflow for all non-trivial training and evaluation.
+Local runs are only allowed for smoke tests under 5 minutes.
+All real experiments must be submitted through rjob to GPU nodes.
+Save job scripts, job IDs, logs, and machine-readable results into the run workspace.
+```
+
+This works well because it explicitly defines:
+
+- what must happen
+- what must not happen
+- what acceptable artifacts look like
+
+### 7.7 Where to Check Whether AutoR Actually Learned It
+
+This kind of skill is best enforced at a few specific stages:
+
+- `00_intake`: did it actually understand the workflow and constraints
+- `03_study_design`: did the design encode that workflow correctly
+- `04_implementation`: did it write reusable scripts, configs, and execution instructions
+- `05_experimentation`: did it actually follow the workflow instead of quietly doing local-only experiments
+
+Using `rjob` as an example, by Stage 04 or 05 you should ideally see:
+
+- reusable submission scripts
+- real job configs
+- job IDs or submission records
+- execution logs
+- machine-readable result files
+
+If those are missing, approval is usually premature.
+
+### 7.8 A Practical Refinement Prompt for This Case
+
+If AutoR failed to follow the cluster workflow you gave it, you can use feedback like this:
+
+```text
+Do not continue with local-only experiments.
+Use the provided rjob workflow to submit real GPU jobs.
+Create reusable submission scripts and save the submit command, job config, job IDs, logs, and machine-readable results under workspace/code and workspace/results.
+Local execution is only for smoke tests.
+```
+
+### 7.9 What Usually Does Not Work
+
+These approaches are usually too weak:
+
+- saying only "please learn rjob"
+- giving a single command with no context
+- saying only "use GPU" without specifying submission flow, output locations, or success criteria
+- failing to check, during approval, whether the workflow was actually followed
+
+The short version is:
+
+**if you want AutoR to learn a skill, package that skill as executable resources and then enforce it through human approval at the critical stages.**
+
 ---
 
 ## 8. How AutoR Runs
