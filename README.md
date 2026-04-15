@@ -37,6 +37,13 @@
 </p>
 
 <p align="center">
+  <strong>Start Here:</strong>
+  <a href="docs/tutorial_en.md">English Guide</a>
+  ·
+  <a href="docs/tutorial_zh.md">中文教程</a>
+</p>
+
+<p align="center">
   <img src="assets/examples/example_fig6_two_layer.png" alt="AutoR example figure" width="92%" />
 </p>
 
@@ -46,6 +53,9 @@
 >
 > It is a structured research harness over a coding agent execution layer:
 > **AI handles execution, humans own the direction, and every run becomes an inspectable research artifact on disk.**
+
+> New users should start with the step-by-step guides:
+> [English Guide](docs/tutorial_en.md) or [中文教程](docs/tutorial_zh.md).
 
 ## Overview
 
