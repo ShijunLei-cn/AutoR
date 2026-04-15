@@ -6,6 +6,9 @@ AGENTS.md
 .codex
 configs/diagram_config.yaml
 docs/
+!docs/
+docs/*
+!docs/tutorial_zh.md
 examples/
 agentspace/
 assets/paper_gallery_source/
