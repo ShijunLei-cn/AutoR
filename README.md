@@ -21,7 +21,9 @@
 </p>
 
 <p align="center">
-  <a href="#overview">Overview</a>
+  <a href="#-overview">Overview</a>
+  ·
+  <a href="#-news">News</a>
   ·
   <a href="#-showcase">Showcase</a>
   ·
@@ -57,13 +59,13 @@
 > New users should start with the step-by-step guides:
 > [English Guide](docs/tutorial_en.md) or [中文教程](docs/tutorial_zh.md).
 
-## Overview
+## 📖 Overview
 
 Most autoresearch systems optimize for autonomy.
 
 AutoR takes a different position: research is too important to hand over as a blind end-to-end loop. The goal is not to remove humans from research. The goal is to give them a stronger execution system.
 
-### At a Glance
+### ✨ At a Glance
 
 | Dimension | AutoR |
 | --- | --- |
@@ -74,7 +76,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 | Quality bar | Artifact-backed outputs, not markdown-only summaries |
 | Recovery | Resume, redo-stage, rollback-stage, stage-local continuation |
 
-### Highlights
+### 🔦 Highlights
 
 | Layer | Highlight | What AutoR actually does |
 | --- | --- | --- |
@@ -91,7 +93,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 
 In practice, that means AutoR is useful not only because of the high-level framing, but also because it handles real research chores: literature organization, experiment manifests, citation verification, artifact indexing, manuscript packaging, and recoverable long-running workflows.
 
-### What AutoR Guarantees
+### ✅ What AutoR Guarantees
 
 - Human approval is required before the workflow advances.
 - Approved summaries become the only cross-stage memory.
@@ -99,7 +101,7 @@ In practice, that means AutoR is useful not only because of the high-level frami
 - Later stages must produce real artifacts, not only prose.
 - A coding agent is the execution layer; AutoR is the research control loop above it.
 
-### Why AutoR?
+### 🤔 Why AutoR?
 
 Many systems aim to generate research outputs that *look* ready.
 
@@ -117,11 +119,21 @@ It is:
 
 > Can you verify every part of it?
 
+## 📰 News
+
+Latest mainline updates:
+
+- **2026-04-18**: Fixed a stage-summary recovery bug so local normalization now restores the required `Decision Ledger` section and validates draft outputs against the correct `.tmp.md` path. Added stage recovery controls that let operators `/skip` the current stage, `/back <stage>` to an earlier stage, or choose skip / roll back directly after retry exhaustion.
+- **2026-04-15**: Added minimal `--operator codex` support alongside Claude, persisted the selected execution backend in `run_config.json`, and improved terminal rendering for backend JSON streams.
+- **2026-04-13**: Added literature evidence ledgers and citation verification outputs, introduced typed hypothesis manifests, hardened experiment manifest parsing, and added regression coverage for research diagram injection.
+- **2026-04-10**: Added a decision ledger for human approvals and refined the public showcase gallery so research artifacts are presented more clearly.
+- **2026-04-08**: Documented optional `--research-diagram` dependencies and tightened the README positioning around human-centered, artifact-backed research execution.
+
 ## 🌟 Showcase
 
 AutoR already has a full example run used throughout the repository: `runs/20260330_101222`.
 
-### Example Run Snapshot
+### 🧪 Example Run Snapshot
 
 | What the run produced | What it demonstrates |
 | --- | --- |
@@ -137,7 +149,7 @@ Highlighted outcomes from that run:
 - The system produced a full research package with real figures, writing sources, and auditable artifacts.
 - The final run preserved the full human-in-the-loop approval trail.
 
-### Terminal Experience
+### 🖥️ Terminal Experience
 
 AutoR is designed for terminal-first execution, but the interaction layer is not limited to raw logs and plain prompts. The current UI supports banner-style startup, colored stage panels, parsed Claude event streams, wrapped markdown summaries, and a menu-driven approval loop suitable for demos and recordings.
 
@@ -145,7 +157,7 @@ AutoR is designed for terminal-first execution, but the interaction layer is not
   <img src="assets/terminal.png" alt="AutoR terminal UI" width="92%" />
 </p>
 
-### Example Figures
+### 📈 Example Figures
 
 <table>
   <tr>
@@ -166,7 +178,7 @@ AutoR is designed for terminal-first execution, but the interaction layer is not
   </tr>
 </table>
 
-### Research Output Gallery
+### 🧾 Research Output Gallery
 
 The manuscript pages below are only the visible surface of larger AutoR runs. To keep the showcase compact and comparable, this gallery uses a consistent 4 × 2 layout: four artifact-backed research outputs, two representative pages from each, and a short note on what each run is demonstrating.
 
@@ -229,7 +241,7 @@ The manuscript pages below are only the visible surface of larger AutoR runs. To
   </tr>
 </table>
 
-### Human-in-the-Loop in Practice
+### 🧑‍🔬 Human-in-the-Loop in Practice
 
 The example run is interesting not because the AI was left alone, but because the human intervened at critical moments:
 
@@ -243,7 +255,7 @@ AI handles execution load; humans steer the research when direction actually mat
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### 🧰 Prerequisites
 
 - Python 3.10+
 - Claude CLI or Codex CLI available on `PATH` for real runs
@@ -252,7 +264,7 @@ AI handles execution load; humans steer the research when direction actually mat
   - `pip install google-genai` (the `google.genai` SDK is **not** a default dependency; if it is missing the diagram step prints `Diagram generation failed: No module named 'google'` and the rest of the run continues unaffected)
   - A Gemini API key exposed via `GOOGLE_API_KEY` or `GEMINI_API_KEY`, or a local `configs/diagram_config.yaml` (see `configs/diagram_config.template.yaml`)
 
-### Common Commands
+### ⌨️ Common Commands
 
 | Goal | Command |
 | --- | --- |
@@ -271,16 +283,6 @@ AI handles execution load; humans steer the research when direction actually mat
 If `--venue` is omitted, AutoR defaults to `neurips_2025`.
 
 Valid stage identifiers include `03`, `3`, and `03_study_design`.
-
-## 📰 News
-
-Latest mainline updates:
-
-- **2026-04-18**: Fixed a stage-summary recovery bug so local normalization now restores the required `Decision Ledger` section and validates draft outputs against the correct `.tmp.md` path. Added stage recovery controls that let operators `/skip` the current stage, `/back <stage>` to an earlier stage, or choose skip / roll back directly after retry exhaustion.
-- **2026-04-15**: Added minimal `--operator codex` support alongside Claude, persisted the selected execution backend in `run_config.json`, and improved terminal rendering for backend JSON streams.
-- **2026-04-13**: Added literature evidence ledgers and citation verification outputs, introduced typed hypothesis manifests, hardened experiment manifest parsing, and added regression coverage for research diagram injection.
-- **2026-04-10**: Added a decision ledger for human approvals and refined the public showcase gallery so research artifacts are presented more clearly.
-- **2026-04-08**: Documented optional `--research-diagram` dependencies and tightened the README positioning around human-centered, artifact-backed research execution.
 
 ## ⚙️ How It Works
 
