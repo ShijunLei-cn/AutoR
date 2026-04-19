@@ -1308,14 +1308,7 @@ def resolve_venue_key(value: str | None) -> str:
 
 
 def mark_stage_execution_started(paths: RunPaths, stage: StageSpec) -> None:
-    marker = paths.stage_execution_marker_file(stage)
-    if marker.exists():
-        # Preserve the original first-start timestamp so that artifacts produced
-        # during earlier attempts (or earlier resumed runs) still count as
-        # "fresh" for this stage. Overwriting the marker would cause the
-        # freshness check to invalidate previously-written artifacts.
-        return
-    write_text(marker, datetime.now().isoformat(timespec="seconds"))
+    write_text(paths.stage_execution_marker_file(stage), datetime.now().isoformat(timespec="seconds"))
 
 
 def stage_execution_started_at(paths: RunPaths, stage: StageSpec) -> float | None:
@@ -1389,6 +1382,7 @@ def canonicalize_stage_markdown(
     memory_text: str,
     markdown: str,
     fallback_text: str = "",
+    stage_output_path: str | None = None,
 ) -> str:
     objective = (
         extract_markdown_section(markdown, "Objective")
@@ -1422,7 +1416,7 @@ def canonicalize_stage_markdown(
     files_produced = extract_markdown_section(markdown, "Files Produced")
     if not files_produced:
         file_refs = _extract_path_references(markdown + "\n" + fallback_text)
-        stage_path = f"stages/{stage.filename}"
+        stage_path = stage_output_path or f"stages/{stage.filename}"
         if stage_path not in file_refs:
             file_refs.insert(0, stage_path)
         files_produced = "\n".join(f"- `{path}`" for path in file_refs[:12]) if file_refs else f"- `{stage_path}`"

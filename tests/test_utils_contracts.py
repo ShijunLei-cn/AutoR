@@ -94,6 +94,38 @@ class UtilsContractTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertIn("## Decision Ledger", normalized)
         self.assertIn(draft_rel, normalized)
+        self.assertIn("### Open Questions", normalized)
+
+    def test_stage_markdown_accepts_heading_style_decision_ledger(self) -> None:
+        paths = self._build_paths()
+        stage = STAGES[0]
+        write_text(paths.stage_tmp_file(stage), "# placeholder")
+        markdown = (
+            f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+            "## Objective\nok\n\n"
+            "## Previously Approved Stage Summaries\nNone yet.\n\n"
+            "## What I Did\nok\n\n"
+            "## Key Results\nok\n\n"
+            f"## Files Produced\n- `stages/{stage.slug}.tmp.md`\n\n"
+            "## Decision Ledger\n\n"
+            "### Open Questions\n\nNone.\n\n"
+            "### Locked Decisions\n\nKeep the current scope.\n\n"
+            "### Assumptions\n\nThe listed files are valid.\n\n"
+            "### Rejected Alternatives\n\nSkipping validation.\n\n"
+            "## Suggestions for Refinement\n"
+            "1. a\n2. b\n3. c\n\n"
+            "## Your Options\n"
+            "1. Use suggestion 1\n"
+            "2. Use suggestion 2\n"
+            "3. Use suggestion 3\n"
+            "4. Refine with your own feedback\n"
+            "5. Approve and continue\n"
+            "6. Abort\n"
+        )
+
+        problems = validate_stage_markdown(markdown, stage=stage, paths=paths)
+
+        self.assertEqual(problems, [])
 
 
 if __name__ == "__main__":
