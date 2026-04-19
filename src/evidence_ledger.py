@@ -49,7 +49,11 @@ def validate_literature_evidence(paths: "RunPaths") -> list[str]:
         claim_id = _clean_str(entry.get("claim_id"))
         if not claim_id:
             problems.append(f"claims.json entry {index} is missing a non-empty claim_id.")
-        if not _clean_str(entry.get("statement")):
+        # Accept either "statement" or "claim" as the key for the claim text.
+        # The prompt template uses "claim" but the validator originally only
+        # checked "statement". Accepting both avoids false validation failures
+        # without breaking anything if Claude produces either key.
+        if not (_clean_str(entry.get("statement")) or _clean_str(entry.get("claim"))):
             problems.append(f"claims.json entry {index} is missing a non-empty statement.")
         referenced_ids = _nonempty_string_list(entry.get("source_ids"))
         if not referenced_ids:
