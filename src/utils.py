@@ -707,13 +707,13 @@ def validate_stage_markdown(
                         + ", ".join(f"`{path}`" for path in missing_files)
                     )
         elif heading == "Decision Ledger":
-            required_markers = [
-                "**Open Questions**",
-                "**Locked Decisions**",
-                "**Assumptions**",
-                "**Rejected Alternatives**",
+            required_keywords = [
+                "Open Questions",
+                "Locked Decisions",
+                "Assumptions",
+                "Rejected Alternatives",
             ]
-            if any(marker not in section for marker in required_markers):
+            if any(keyword not in section for keyword in required_keywords):
                 problems.append(
                     "Section 'Decision Ledger' must include Open Questions, Locked Decisions, "
                     "Assumptions, and Rejected Alternatives."
@@ -1421,15 +1421,6 @@ def canonicalize_stage_markdown(
             file_refs.insert(0, stage_path)
         files_produced = "\n".join(f"- `{path}`" for path in file_refs[:12]) if file_refs else f"- `{stage_path}`"
 
-    decision_ledger = extract_markdown_section(markdown, "Decision Ledger")
-    if not decision_ledger:
-        decision_ledger = (
-            "- **Open Questions**: Which parts of this stage still require explicit human review before they can be trusted downstream?\n"
-            "- **Locked Decisions**: Preserve the current normalized stage summary structure so the workflow can continue safely.\n"
-            "- **Assumptions**: Existing workspace artifacts and captured execution output remain the best available evidence for this stage.\n"
-            "- **Rejected Alternatives**: Leaving the stage summary incomplete or dropping the currently recovered context."
-        )
-
     suggestions_section = extract_markdown_section(markdown, "Suggestions for Refinement") or ""
     numbered_suggestions = parse_numbered_list(suggestions_section)
     suggestion_items = [numbered_suggestions[key] for key in sorted(numbered_suggestions)] if numbered_suggestions else []
@@ -1445,6 +1436,15 @@ def canonicalize_stage_markdown(
             suggestion_items.append(default_suggestion)
 
     suggestion_items = suggestion_items[:3]
+
+    decision_ledger = extract_markdown_section(markdown, "Decision Ledger")
+    if not decision_ledger:
+        decision_ledger = (
+            "### Open Questions\n\n_None identified._\n\n"
+            "### Locked Decisions\n\n_None yet._\n\n"
+            "### Assumptions\n\n_None yet._\n\n"
+            "### Rejected Alternatives\n\n_None yet._"
+        )
 
     return (
         f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
