@@ -56,8 +56,12 @@ class ClaudeOperator:
         continue_session: bool = False,
     ) -> OperatorResult:
         if self.fake_mode:
-            return self._run_fake(stage, prompt, paths, attempt_no, continue_session=continue_session)
-        return self._run_real(stage, prompt, paths, attempt_no, continue_session=continue_session)
+            return self._run_fake(
+                stage, prompt, paths, attempt_no, continue_session=continue_session
+            )
+        return self._run_real(
+            stage, prompt, paths, attempt_no, continue_session=continue_session
+        )
 
     def _run_real(
         self,
@@ -72,7 +76,9 @@ class ClaudeOperator:
                 f"{self._agent_label()} CLI not found: {self.command}. Install it or use --fake-operator."
             )
 
-        prompt_path = paths.prompt_cache_dir / f"{stage.slug}_attempt_{attempt_no:02d}.prompt.md"
+        prompt_path = (
+            paths.prompt_cache_dir / f"{stage.slug}_attempt_{attempt_no:02d}.prompt.md"
+        )
         write_text(prompt_path, prompt)
         session_id = self._resolve_stage_session_id(paths, stage, continue_session)
         command, invocation_cwd, stdin_text = self._prepare_invocation(
@@ -109,14 +115,16 @@ class ClaudeOperator:
             },
         )
 
-        exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = self._run_streaming_command(
-            command=command,
-            cwd=invocation_cwd,
-            stage=stage,
-            attempt_no=attempt_no,
-            paths=paths,
-            mode="real_continue" if continue_session else "real_start",
-            stdin_text=stdin_text,
+        exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = (
+            self._run_streaming_command(
+                command=command,
+                cwd=invocation_cwd,
+                stage=stage,
+                attempt_no=attempt_no,
+                paths=paths,
+                mode="real_continue" if continue_session else "real_start",
+                stdin_text=stdin_text,
+            )
         )
         stage_file = paths.stage_tmp_file(stage)
 
@@ -127,11 +135,13 @@ class ClaudeOperator:
             and self._looks_like_resume_failure(stdout_text, stderr_text)
         ):
             fallback_session_id = str(uuid.uuid4())
-            fallback_command, fallback_cwd, fallback_stdin_text = self._prepare_invocation(
-                prompt_path,
-                fallback_session_id,
-                paths=paths,
-                resume=False,
+            fallback_command, fallback_cwd, fallback_stdin_text = (
+                self._prepare_invocation(
+                    prompt_path,
+                    fallback_session_id,
+                    paths=paths,
+                    resume=False,
+                )
             )
             append_jsonl(
                 paths.logs_raw,
@@ -148,14 +158,16 @@ class ClaudeOperator:
                 },
             )
             self._mark_session_broken(paths, stage, session_id, reason="resume_failure")
-            exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = self._run_streaming_command(
-                command=fallback_command,
-                cwd=fallback_cwd,
-                stage=stage,
-                attempt_no=attempt_no,
-                paths=paths,
-                mode="real_continue_fallback_start",
-                stdin_text=fallback_stdin_text,
+            exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = (
+                self._run_streaming_command(
+                    command=fallback_command,
+                    cwd=fallback_cwd,
+                    stage=stage,
+                    attempt_no=attempt_no,
+                    paths=paths,
+                    mode="real_continue_fallback_start",
+                    stdin_text=fallback_stdin_text,
+                )
             )
             session_id = fallback_session_id
 
@@ -209,12 +221,20 @@ class ClaudeOperator:
         attempt_no: int,
     ) -> OperatorResult:
         if self.fake_mode:
-            return self._run_fake(stage, original_prompt, paths, attempt_no, continue_session=False)
+            return self._run_fake(
+                stage, original_prompt, paths, attempt_no, continue_session=False
+            )
 
         stage_file = paths.stage_tmp_file(stage)
-        current_draft_text = read_text(stage_file) if stage_file.exists() else "(missing)"
+        current_draft_text = (
+            read_text(stage_file) if stage_file.exists() else "(missing)"
+        )
         current_final_path = paths.stage_file(stage)
-        current_final_text = read_text(current_final_path) if current_final_path.exists() else "(missing)"
+        current_final_text = (
+            read_text(current_final_path)
+            if current_final_path.exists()
+            else "(missing)"
+        )
         recovery_prompt = f"""
 You are performing failure recovery for {stage.stage_title}.
 
@@ -275,9 +295,14 @@ Original stderr:
 {original_result.stderr or "(empty)"}
 """.strip()
 
-        recovery_prompt_path = paths.prompt_cache_dir / f"{stage.slug}_attempt_{attempt_no:02d}_repair.prompt.md"
+        recovery_prompt_path = (
+            paths.prompt_cache_dir
+            / f"{stage.slug}_attempt_{attempt_no:02d}_repair.prompt.md"
+        )
         write_text(recovery_prompt_path, recovery_prompt)
-        session_id = self._resolve_stage_session_id(paths, stage, continue_session=True, allow_create=False)
+        session_id = self._resolve_stage_session_id(
+            paths, stage, continue_session=True, allow_create=False
+        )
         if session_id:
             command, invocation_cwd, stdin_text = self._prepare_invocation(
                 recovery_prompt_path,
@@ -287,7 +312,9 @@ Original stderr:
                 tools="Write,Read,Glob,Grep",
             )
         else:
-            session_id = self._resolve_stage_session_id(paths, stage, continue_session=False)
+            session_id = self._resolve_stage_session_id(
+                paths, stage, continue_session=False
+            )
             command, invocation_cwd, stdin_text = self._prepare_invocation(
                 recovery_prompt_path,
                 session_id,
@@ -324,14 +351,16 @@ Original stderr:
             },
         )
 
-        exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = self._run_streaming_command(
-            command=command,
-            cwd=invocation_cwd,
-            stage=stage,
-            attempt_no=attempt_no,
-            paths=paths,
-            mode="repair",
-            stdin_text=stdin_text,
+        exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = (
+            self._run_streaming_command(
+                command=command,
+                cwd=invocation_cwd,
+                stage=stage,
+                attempt_no=attempt_no,
+                paths=paths,
+                mode="repair",
+                stdin_text=stdin_text,
+            )
         )
         if (
             session_id
@@ -340,12 +369,14 @@ Original stderr:
             and self._looks_like_resume_failure(stdout_text, stderr_text)
         ):
             fallback_session_id = str(uuid.uuid4())
-            fallback_command, fallback_cwd, fallback_stdin_text = self._prepare_invocation(
-                recovery_prompt_path,
-                fallback_session_id,
-                paths=paths,
-                resume=False,
-                tools="Write,Read,Glob,Grep",
+            fallback_command, fallback_cwd, fallback_stdin_text = (
+                self._prepare_invocation(
+                    recovery_prompt_path,
+                    fallback_session_id,
+                    paths=paths,
+                    resume=False,
+                    tools="Write,Read,Glob,Grep",
+                )
             )
             append_jsonl(
                 paths.logs_raw,
@@ -361,15 +392,19 @@ Original stderr:
                     }
                 },
             )
-            self._mark_session_broken(paths, stage, session_id, reason="repair_resume_failure")
-            exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = self._run_streaming_command(
-                command=fallback_command,
-                cwd=fallback_cwd,
-                stage=stage,
-                attempt_no=attempt_no,
-                paths=paths,
-                mode="repair_fallback_start",
-                stdin_text=fallback_stdin_text,
+            self._mark_session_broken(
+                paths, stage, session_id, reason="repair_resume_failure"
+            )
+            exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = (
+                self._run_streaming_command(
+                    command=fallback_command,
+                    cwd=fallback_cwd,
+                    stage=stage,
+                    attempt_no=attempt_no,
+                    paths=paths,
+                    mode="repair_fallback_start",
+                    stdin_text=fallback_stdin_text,
+                )
             )
             session_id = fallback_session_id
 
@@ -391,7 +426,9 @@ Original stderr:
             stage,
             attempt_no,
             {
-                "status": "repair_completed" if exit_code == 0 and stage_file.exists() else "repair_failed",
+                "status": "repair_completed"
+                if exit_code == 0 and stage_file.exists()
+                else "repair_failed",
                 "mode": "repair",
                 "session_id": effective_session_id,
                 "prompt_path": str(recovery_prompt_path),
@@ -434,9 +471,12 @@ Original stderr:
         )
 
         if process.stdout is None:
-            raise RuntimeError(f"Failed to capture {self._agent_label()} output stream.")
+            raise RuntimeError(
+                f"Failed to capture {self._agent_label()} output stream."
+            )
         stdin_thread: threading.Thread | None = None
         if stdin_text is not None and process.stdin is not None:
+
             def _feed_stdin() -> None:
                 try:
                     process.stdin.write(stdin_text)
@@ -558,13 +598,19 @@ Original stderr:
                 non_json_lines=non_json_lines,
                 raw_lines=raw_lines,
             )
-            return -1, stdout_text, "Stage timed out", observed_session_id, {
-                "raw_line_count": len(raw_lines),
-                "non_json_line_count": len(non_json_lines),
-                "malformed_json_count": malformed_json_count,
-                "observed_session_id": observed_session_id,
-                "timed_out": True,
-            }
+            return (
+                -1,
+                stdout_text,
+                "Stage timed out",
+                observed_session_id,
+                {
+                    "raw_line_count": len(raw_lines),
+                    "non_json_line_count": len(non_json_lines),
+                    "malformed_json_count": malformed_json_count,
+                    "observed_session_id": observed_session_id,
+                    "timed_out": True,
+                },
+            )
 
         exit_code = process.wait()
         if raw_lines and not ended_with_newline:
@@ -576,12 +622,18 @@ Original stderr:
             non_json_lines=non_json_lines,
             raw_lines=raw_lines,
         )
-        return exit_code, stdout_text, "", observed_session_id, {
-            "raw_line_count": len(raw_lines),
-            "non_json_line_count": len(non_json_lines),
-            "malformed_json_count": malformed_json_count,
-            "observed_session_id": observed_session_id,
-        }
+        return (
+            exit_code,
+            stdout_text,
+            "",
+            observed_session_id,
+            {
+                "raw_line_count": len(raw_lines),
+                "non_json_line_count": len(non_json_lines),
+                "malformed_json_count": malformed_json_count,
+                "observed_session_id": observed_session_id,
+            },
+        )
 
     def _compose_stdout_text(
         self,
@@ -589,7 +641,9 @@ Original stderr:
         non_json_lines: list[str],
         raw_lines: list[str],
     ) -> str:
-        fragment_text = "\n".join(fragment for fragment in extracted_fragments if fragment).strip()
+        fragment_text = "\n".join(
+            fragment for fragment in extracted_fragments if fragment
+        ).strip()
         non_json_text = "\n".join(line for line in non_json_lines if line).strip()
         raw_text = "\n".join(line for line in raw_lines if line).strip()
 
@@ -611,9 +665,13 @@ Original stderr:
         attempt_no: int,
         continue_session: bool = False,
     ) -> OperatorResult:
-        session_id = self._resolve_stage_session_id(paths, stage, continue_session=continue_session)
+        session_id = self._resolve_stage_session_id(
+            paths, stage, continue_session=continue_session
+        )
         self._persist_stage_session_id(paths, stage, session_id)
-        approved_memory = self._extract_approved_memory_from_prompt(prompt) or read_text(paths.memory)
+        approved_memory = self._extract_approved_memory_from_prompt(
+            prompt
+        ) or read_text(paths.memory)
         previous_summaries = approved_stage_summaries(approved_memory)
         agent_label = self._agent_label()
         note_path = paths.notes_dir / f"{stage.slug}_fake_operator_note.md"
@@ -954,7 +1012,9 @@ Original stderr:
 
         return str(uuid.uuid4())
 
-    def _persist_stage_session_id(self, paths: RunPaths, stage: StageSpec, session_id: str | None) -> None:
+    def _persist_stage_session_id(
+        self, paths: RunPaths, stage: StageSpec, session_id: str | None
+    ) -> None:
         if not session_id:
             return
         write_text(paths.stage_session_file(stage), session_id)
@@ -987,7 +1047,9 @@ Original stderr:
         tools: str | None = None,
     ) -> tuple[list[str], Path, str | None]:
         return (
-            self._build_cli_command(prompt_path, session_id, resume=resume, tools=tools),
+            self._build_cli_command(
+                prompt_path, session_id, resume=resume, tools=tools
+            ),
             paths.run_root,
             None,
         )
@@ -1026,7 +1088,9 @@ Original stderr:
         return command
 
     def _looks_like_resume_failure(self, stdout_text: str, stderr_text: str) -> bool:
-        combined = "\n".join(part for part in [stdout_text, stderr_text] if part).lower()
+        combined = "\n".join(
+            part for part in [stdout_text, stderr_text] if part
+        ).lower()
         return (
             "no conversation found with session id" in combined
             or ("resume" in combined and "not found" in combined)
@@ -1041,7 +1105,10 @@ Original stderr:
         attempt_no: int,
         payload: dict[str, object],
     ) -> None:
-        write_text(paths.stage_attempt_state_file(stage, attempt_no), json.dumps(payload, indent=2, ensure_ascii=True))
+        write_text(
+            paths.stage_attempt_state_file(stage, attempt_no),
+            json.dumps(payload, indent=2, ensure_ascii=True),
+        )
 
     def _update_session_state(
         self,
@@ -1062,7 +1129,9 @@ Original stderr:
             payload["session_id"] = session_id
         write_text(path, json.dumps(payload, indent=2, ensure_ascii=True))
 
-    def _mark_session_broken(self, paths: RunPaths, stage: StageSpec, session_id: str | None, reason: str) -> None:
+    def _mark_session_broken(
+        self, paths: RunPaths, stage: StageSpec, session_id: str | None, reason: str
+    ) -> None:
         self._update_session_state(
             paths,
             stage,

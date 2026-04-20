@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import io
 import sys
 from pathlib import Path
+
+# Force UTF-8 on stdin/stdout/stderr so that non-ASCII input (e.g. Chinese)
+# is decoded correctly regardless of the platform locale.
+if hasattr(sys.stdin, "reconfigure"):
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from src.intake import ResourceEntry, classify_resource, collect_resource_paths_from_ui
 from src.manager import ResearchManager
@@ -70,7 +80,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         metavar="PATH",
         help="Paths to resource files or directories to include in the run "
-             "(PDFs, code repos, datasets, .bib files, notes).",
+        "(PDFs, code repos, datasets, .bib files, notes).",
     )
     parser.add_argument(
         "--skip-intake",
@@ -85,19 +95,19 @@ def parse_args() -> argparse.Namespace:
         "--research-diagram",
         action="store_true",
         help="After the writing stage, generate a method illustration diagram using "
-             "the Gemini API and insert it into the LaTeX paper.",
+        "the Gemini API and insert it into the LaTeX paper.",
     )
     parser.add_argument(
         "--project-root",
         metavar="PATH",
         help="Path to an existing project repository. AutoR will scan it to infer "
-             "current project state and recommend a re-entry stage.",
+        "current project state and recommend a re-entry stage.",
     )
     parser.add_argument(
         "--paper-corpus",
         metavar="PATH",
         help="Path to a directory of the user's own prior papers (PDFs, LaTeX, BibTeX, notes). "
-             "AutoR will analyze them to build a researcher profile that seeds downstream stages.",
+        "AutoR will analyze them to build a researcher profile that seeds downstream stages.",
     )
     parser.add_argument(
         "--stage-timeout",
@@ -121,8 +131,12 @@ def create_operator(
     stage_timeout: int,
 ) -> OperatorProtocol:
     if operator_name == "codex":
-        return CodexOperator(model=model, fake_mode=fake_mode, ui=ui, stage_timeout=stage_timeout)
-    return ClaudeOperator(model=model, fake_mode=fake_mode, ui=ui, stage_timeout=stage_timeout)
+        return CodexOperator(
+            model=model, fake_mode=fake_mode, ui=ui, stage_timeout=stage_timeout
+        )
+    return ClaudeOperator(
+        model=model, fake_mode=fake_mode, ui=ui, stage_timeout=stage_timeout
+    )
 
 
 def resolve_stage(value: str | None) -> StageSpec | None:
@@ -206,19 +220,29 @@ def main() -> int:
         start_stage = resolve_stage(args.redo_stage)
         rollback_stage = resolve_stage(args.rollback_stage)
         if start_stage is not None and rollback_stage is not None:
-            raise ValueError("--redo-stage and --rollback-stage are mutually exclusive.")
+            raise ValueError(
+                "--redo-stage and --rollback-stage are mutually exclusive."
+            )
         run_root = resolve_resume_run(runs_dir, args.resume_run)
         paths = build_run_paths(run_root)
         existing_config = load_run_config(paths)
-        existing_operator = str(existing_config.get("operator") or "claude").strip().lower()
-        operator_name = (args.operator or existing_config.get("operator") or "claude").strip().lower()
+        existing_operator = (
+            str(existing_config.get("operator") or "claude").strip().lower()
+        )
+        operator_name = (
+            (args.operator or existing_config.get("operator") or "claude")
+            .strip()
+            .lower()
+        )
         existing_model = existing_config.get("model")
         if args.model:
             model = args.model
         elif args.operator and operator_name != existing_operator:
             model = default_model_for_operator(operator_name)
         else:
-            model = (existing_model if existing_model != "unknown" else None) or default_model_for_operator(operator_name)
+            model = (
+                existing_model if existing_model != "unknown" else None
+            ) or default_model_for_operator(operator_name)
         venue = resolve_venue_key(args.venue or existing_config["venue"])
         operator = create_operator(
             operator_name,
@@ -233,13 +257,17 @@ def main() -> int:
             operator=operator,
             ui=ui,
         )
-        return 0 if manager.resume_run(
-            run_root,
-            start_stage=start_stage or rollback_stage,
-            venue=venue,
-            rollback_stage=rollback_stage,
-            research_diagram=args.research_diagram,
-        ) else 1
+        return (
+            0
+            if manager.resume_run(
+                run_root,
+                start_stage=start_stage or rollback_stage,
+                venue=venue,
+                rollback_stage=rollback_stage,
+                research_diagram=args.research_diagram,
+            )
+            else 1
+        )
 
     operator_name = (args.operator or "claude").strip().lower()
     model = args.model or default_model_for_operator(operator_name)
@@ -268,18 +296,26 @@ def main() -> int:
     if not skip_intake and sys.stdin.isatty():
         resources = collect_resource_paths_from_ui(ui, initial_resources=args.resources)
 
-    project_root_arg = Path(args.project_root).expanduser().resolve() if args.project_root else None
-    paper_corpus = Path(args.paper_corpus).expanduser().resolve() if args.paper_corpus else None
+    project_root_arg = (
+        Path(args.project_root).expanduser().resolve() if args.project_root else None
+    )
+    paper_corpus = (
+        Path(args.paper_corpus).expanduser().resolve() if args.paper_corpus else None
+    )
 
-    return 0 if manager.run(
-        goal,
-        venue=venue,
-        resources=resources or None,
-        skip_intake=skip_intake,
-        research_diagram=args.research_diagram,
-        project_root=project_root_arg,
-        paper_corpus=paper_corpus,
-    ) else 1
+    return (
+        0
+        if manager.run(
+            goal,
+            venue=venue,
+            resources=resources or None,
+            skip_intake=skip_intake,
+            research_diagram=args.research_diagram,
+            project_root=project_root_arg,
+            paper_corpus=paper_corpus,
+        )
+        else 1
+    )
 
 
 if __name__ == "__main__":
