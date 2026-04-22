@@ -13,3 +13,9 @@ docs/*
 examples/
 agentspace/
 assets/paper_gallery_source/
+
+datasets
+.vscode
+.omc
+.claude
+.temp
