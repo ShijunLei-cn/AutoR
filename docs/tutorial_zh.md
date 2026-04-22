@@ -299,6 +299,51 @@ python main.py --fake-operator --goal "UI smoke test"
 
 不要把 smoke test 的结果当成真实研究结果。
 
+### 6.4 可选：在浏览器里使用 AutoR Studio
+
+如果你更希望在浏览器里审批 stage、查看论文、观察运行进度，而不是始终盯着终端，也可以使用 **AutoR Studio**。
+
+启动方式：
+
+```bash
+python studio.py
+```
+
+然后在浏览器打开：
+
+```text
+http://127.0.0.1:8000/studio/
+```
+
+Studio 更适合这些场景：
+
+- 你想在浏览器里审 stage，而不是看终端面板
+- 你想更直观地 approve 或给反馈
+- 你想把论文 PDF、LaTeX 源文件和 build log 放在一个界面里看
+- 你想在长 run 中查看版本历史和 session trace
+- 你想录一个比纯终端更清晰的演示
+
+最重要的一点是：
+
+**Studio 不是另一套工作流。**
+
+它和终端模式共用同一套 run 目录、stage summary、manifest 和 artifacts，也就是说：
+
+- terminal 模式和 Studio 只是同一个系统的两种界面
+- 浏览器 UI 不会生成另一套隐藏格式
+- 你在 Studio 里看到的内容，原则上也都应该能在 `runs/<run_id>/` 里找到
+
+当前限制：
+
+- Studio 目前还是 **Claude-backed**
+- 终端主流程支持 `claude` 和 `codex`
+- 所以如果你现在必须用 Codex，请继续使用 `python main.py`
+
+一个简单的使用原则：
+
+- 想要最直接、最可脚本化、backend 更灵活的工作流，就用 `python main.py`
+- 想要更直观的审批、review 和演示体验，就用 `python studio.py`
+
 ---
 
 ## 7. 第四步：需要固定配置时，再用显式参数启动
@@ -328,6 +373,33 @@ python main.py \
 - 新建 run 时，如果你不写 `--operator`，默认使用 `claude`
 - 新建 run 时，如果你不写 `--model`，Claude 默认是 `sonnet`，Codex 默认是 `default`
 - 恢复旧 run 时，AutoR 默认会保留这个 run 原来的 backend、model 和 venue；只有你显式指定新值时才会覆盖
+
+如果你想启用“全自动审批模式”，也就是不再等待你手动点 1~6，而是接入一个严格的模拟人类 reviewer agent，可以这样跑：
+
+```bash
+python main.py \
+  --operator claude \
+  --model sonnet \
+  --full-auto \
+  --goal "..."
+```
+
+如果你希望“执行 agent”和“审批 reviewer”分开，也可以单独指定 reviewer 的 backend：
+
+```bash
+python main.py \
+  --operator codex \
+  --model default \
+  --full-auto \
+  --review-operator claude \
+  --review-model opus \
+  --goal "..."
+```
+
+这里要明确两点：
+
+- `--full-auto` **不会改变主体科研流程**，只是把原来等待人工审批的地方，替换成一个严格的 reviewer agent
+- 真正重要、要出高质量成果的研究，仍然推荐默认的人类审批模式；`--full-auto` 更适合夜间 unattended run、批量 dry run、流程压测或长任务巡航
 
 ### 7.2 推荐同时指定投稿 venue
 

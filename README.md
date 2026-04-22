@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  A terminal-first research harness that turns long, messy research work into reproducible, artifact-backed runs.
+  A terminal-first research harness, with a local browser Studio, that turns long, messy research work into reproducible, artifact-backed runs.
 </p>
 
 <p align="center">
@@ -70,7 +70,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 | Dimension | AutoR |
 | --- | --- |
 | Execution model | A coding agent as the execution layer, AutoR as the research control loop |
-| Control model | Human approval required after every stage |
+| Control model | Human approval by default, with an optional strict reviewer-agent gate for unattended runs |
 | Research unit | A reproducible run under `runs/<run_id>/` |
 | Workflow shape | Optional intake plus a fixed 8-stage pipeline |
 | Quality bar | Artifact-backed outputs, not markdown-only summaries |
@@ -95,7 +95,8 @@ In practice, that means AutoR is useful not only because of the high-level frami
 
 ### ✅ What AutoR Guarantees
 
-- Human approval is required before the workflow advances.
+- By default, human approval is required before the workflow advances.
+- An optional reviewer agent can simulate that gate for unattended runs, but the human-centered default remains manual review.
 - Approved summaries become the only cross-stage memory.
 - Every run is isolated, resumable, and auditable.
 - Later stages must produce real artifacts, not only prose.
@@ -123,6 +124,8 @@ It is:
 
 Latest mainline updates:
 
+- **2026-04-20**: Added an optional `--full-auto` approval mode. The execution loop is unchanged, but the manual approval gate can now be replaced by a strict simulated reviewer agent backed by Claude or Codex, with reviewer settings persisted in `run_config.json`.
+- **2026-04-19**: Merged **AutoR Studio** into main: a local browser workspace for the same run-based workflow, with live stage monitoring, human review, restart-safe recovery, paper preview, version history, and a Notebook view. The browser UI shares the same run directories and artifact model as the terminal workflow and is currently Claude-backed.
 - **2026-04-18**: Fixed a stage-summary recovery bug so local normalization now restores the required `Decision Ledger` section and validates draft outputs against the correct `.tmp.md` path. Added stage recovery controls that let operators `/skip` the current stage, `/back <stage>` to an earlier stage, or choose skip / roll back directly after retry exhaustion.
 - **2026-04-15**: Added minimal `--operator codex` support alongside Claude, persisted the selected execution backend in `run_config.json`, and improved terminal rendering for backend JSON streams.
 - **2026-04-13**: Added literature evidence ledgers and citation verification outputs, introduced typed hypothesis manifests, hardened experiment manifest parsing, and added regression coverage for research diagram injection.
@@ -272,7 +275,9 @@ AI handles execution load; humans steer the research when direction actually mat
 | Start with an explicit goal | `python main.py --goal "Your research goal here"` |
 | Start with preloaded resources | `python main.py --goal "Your research goal here" --resources paper.pdf refs.bib data.csv` |
 | Run a local smoke test without a real agent backend | `python main.py --fake-operator --goal "Smoke test"` |
+| Run with the automated reviewer gate | `python main.py --full-auto --goal "Your research goal here"` |
 | Choose the execution backend | `python main.py --operator claude` or `python main.py --operator codex` |
+| Choose the reviewer backend separately | `python main.py --full-auto --review-operator claude --review-model opus` |
 | Choose a Claude model | `python main.py --operator claude --model sonnet` or `python main.py --operator claude --model opus` |
 | Start with Codex | `python main.py --operator codex --model default --goal "Your research goal here"` |
 | Choose a writing venue profile | `python main.py --venue neurips_2025` or `python main.py --venue nature` or `python main.py --venue jmlr` |
@@ -282,7 +287,41 @@ AI handles execution load; humans steer the research when direction actually mat
 
 If `--venue` is omitted, AutoR defaults to `neurips_2025`.
 
+`--full-auto` does not change the stage pipeline. It only replaces the manual approval menu with a strict reviewer agent. This is useful for unattended sweeps, overnight runs, and dry-run automation, but the default human-reviewed mode is still the recommended path for serious research work.
+
 Valid stage identifiers include `03`, `3`, and `03_study_design`.
+
+### Studio (browser UI)
+
+AutoR Studio is a local web UI that drives the same real Claude-backed pipeline through a browser instead of a terminal. Human-in-the-loop approval, feedback, stage re-runs, live session traces, and the compiled paper all live in one page.
+
+```bash
+# Start the Studio server (default: http://127.0.0.1:8000)
+python studio.py
+
+# Then open the UI in your browser:
+#   http://127.0.0.1:8000/studio/
+```
+
+Options:
+
+```bash
+python studio.py --port 8765                    # custom port
+python studio.py --host 0.0.0.0 --port 8000     # bind externally
+python studio.py --runs-dir /path/to/runs       # override runs directory
+```
+
+What you can do in the Studio:
+
+- **Create a project** from the hub — fill in the title + thesis, click **Create Project**, and a real Claude-backed run starts immediately
+- **Watch stages run live** on the Overview page — horizontal 8-pill stage strip, pulsing current stage, live session trace streaming real Claude tool calls from `logs_raw.jsonl`
+- **Review & Approve** — the Review page shows a "You are reviewing" hero card with a TL;DR extracted from the stage markdown, a Files Produced pill list, and an `✅ Approve → Advance to <next stage>` button
+- **Send Feedback & Re-run** — feedback is woven into the **first attempt's prompt** of the next run (not wasted on an intermediate Claude call). Works on `human_review` AND `failed` stages
+- **Resume across restarts** — if you stop the server and come back, clicking Approve/Feedback lazy-resumes the existing on-disk run without re-running stages that already have a draft
+- **Paper preview** — the Paper tab renders the compiled PDF, the LaTeX sources, and the build log
+- **Versions page** — the full checkpoint/attempt timeline for every stage
+
+The Studio requires the **Claude CLI** (`claude` on `PATH`) since every run is a real Claude-driven pipeline. If `claude` isn't installed, the server fails fast at startup with a clear error.
 
 ## ⚙️ How It Works
 

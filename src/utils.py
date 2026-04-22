@@ -263,12 +263,27 @@ def initialize_run_config(
     model: str,
     venue: str | None = None,
     operator: str = "claude",
+    approval_mode: str = "manual",
+    review_operator: str | None = None,
+    review_model: str | None = None,
 ) -> dict[str, Any]:
+    normalized_operator = operator.strip().lower() if operator.strip() else "claude"
+    normalized_review_operator = (
+        review_operator.strip().lower()
+        if isinstance(review_operator, str) and review_operator.strip()
+        else normalized_operator
+    )
     selected_venue = resolve_venue_key(venue)
     config = {
         "model": model,
-        "operator": operator.strip().lower() if operator.strip() else "claude",
+        "operator": normalized_operator,
         "venue": selected_venue,
+        "approval_mode": "agent" if approval_mode == "agent" else "manual",
+        "review_operator": normalized_review_operator,
+        "review_model": str(
+            review_model
+            or ("default" if normalized_review_operator == "codex" else "sonnet")
+        ),
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
     write_text(paths.run_config, json.dumps(config, indent=2, ensure_ascii=False))
@@ -277,23 +292,60 @@ def initialize_run_config(
 
 def load_run_config(paths: RunPaths) -> dict[str, Any]:
     if not paths.run_config.exists():
-        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
+        return {
+            "model": "unknown",
+            "operator": "claude",
+            "venue": DEFAULT_VENUE,
+            "approval_mode": "manual",
+            "review_operator": "claude",
+            "review_model": "sonnet",
+        }
 
     try:
         payload = json.loads(read_text(paths.run_config))
     except json.JSONDecodeError:
-        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
+        return {
+            "model": "unknown",
+            "operator": "claude",
+            "venue": DEFAULT_VENUE,
+            "approval_mode": "manual",
+            "review_operator": "claude",
+            "review_model": "sonnet",
+        }
 
     if not isinstance(payload, dict):
-        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
+        return {
+            "model": "unknown",
+            "operator": "claude",
+            "venue": DEFAULT_VENUE,
+            "approval_mode": "manual",
+            "review_operator": "claude",
+            "review_model": "sonnet",
+        }
 
     model = payload.get("model")
     operator = payload.get("operator")
     venue = payload.get("venue")
+    normalized_operator = operator.strip().lower() if isinstance(operator, str) and operator.strip() else "claude"
+    review_operator = payload.get("review_operator")
+    normalized_review_operator = (
+        review_operator.strip().lower()
+        if isinstance(review_operator, str) and review_operator.strip()
+        else normalized_operator
+    )
+    review_model = payload.get("review_model")
+    approval_mode = payload.get("approval_mode")
     config = {
         "model": model if isinstance(model, str) and model.strip() else "unknown",
-        "operator": operator.strip().lower() if isinstance(operator, str) and operator.strip() else "claude",
+        "operator": normalized_operator,
         "venue": resolve_venue_key(venue if isinstance(venue, str) else None),
+        "approval_mode": "agent" if approval_mode == "agent" else "manual",
+        "review_operator": normalized_review_operator,
+        "review_model": (
+            review_model.strip()
+            if isinstance(review_model, str) and review_model.strip()
+            else ("default" if normalized_review_operator == "codex" else "sonnet")
+        ),
     }
     created_at = payload.get("created_at")
     if isinstance(created_at, str) and created_at.strip():
@@ -302,10 +354,20 @@ def load_run_config(paths: RunPaths) -> dict[str, Any]:
 
 
 def save_run_config(paths: RunPaths, config: dict[str, Any]) -> None:
+    normalized_operator = str(config.get("operator") or "claude").strip().lower() or "claude"
+    normalized_review_operator = str(
+        config.get("review_operator") or normalized_operator
+    ).strip().lower() or normalized_operator
     normalized = {
         "model": str(config.get("model") or "unknown"),
-        "operator": str(config.get("operator") or "claude").strip().lower() or "claude",
+        "operator": normalized_operator,
         "venue": resolve_venue_key(str(config.get("venue") or DEFAULT_VENUE)),
+        "approval_mode": "agent" if config.get("approval_mode") == "agent" else "manual",
+        "review_operator": normalized_review_operator,
+        "review_model": str(
+            config.get("review_model")
+            or ("default" if normalized_review_operator == "codex" else "sonnet")
+        ),
     }
     created_at = config.get("created_at")
     if isinstance(created_at, str) and created_at.strip():
@@ -320,12 +382,22 @@ def ensure_run_config(
     model: str | None = None,
     venue: str | None = None,
     operator: str | None = None,
+    approval_mode: str | None = None,
+    review_operator: str | None = None,
+    review_model: str | None = None,
 ) -> dict[str, Any]:
     current = load_run_config(paths)
+    effective_operator = operator or current.get("operator") or "claude"
+    effective_review_operator = review_operator or current.get("review_operator") or effective_operator
     updated = {
         "model": model or current.get("model") or "unknown",
-        "operator": operator or current.get("operator") or "claude",
+        "operator": effective_operator,
         "venue": resolve_venue_key(venue or current.get("venue")),
+        "approval_mode": approval_mode or current.get("approval_mode") or "manual",
+        "review_operator": effective_review_operator,
+        "review_model": review_model or current.get("review_model") or (
+            "default" if effective_review_operator == "codex" else "sonnet"
+        ),
         "created_at": current.get("created_at") or datetime.now().isoformat(timespec="seconds"),
     }
     save_run_config(paths, updated)
@@ -707,13 +779,13 @@ def validate_stage_markdown(
                         + ", ".join(f"`{path}`" for path in missing_files)
                     )
         elif heading == "Decision Ledger":
-            required_markers = [
-                "**Open Questions**",
-                "**Locked Decisions**",
-                "**Assumptions**",
-                "**Rejected Alternatives**",
+            required_keywords = [
+                "Open Questions",
+                "Locked Decisions",
+                "Assumptions",
+                "Rejected Alternatives",
             ]
-            if any(marker not in section for marker in required_markers):
+            if any(keyword not in section for keyword in required_keywords):
                 problems.append(
                     "Section 'Decision Ledger' must include Open Questions, Locked Decisions, "
                     "Assumptions, and Rejected Alternatives."
@@ -1183,14 +1255,36 @@ def _extract_path_references(text: str) -> list[str]:
 
 
 def _listed_file_exists(run_root: Path, listed_path: str) -> bool:
+    """Check whether a file referenced in a stage's "Files Produced" section
+    actually exists on disk.
+
+    Stages may legitimately reference files using either of two relative
+    base paths:
+
+    1. **Run-root-relative** — e.g. ``workspace/code/run_ablation.py``. This
+       is the canonical form the rest of AutoR uses internally.
+    2. **Workspace-relative** — e.g. ``code/run_ablation.py``. This is the
+       natural form an LLM (or a human) reaches for when describing files
+       inside the workspace, since the project's "current directory" while
+       the stage runs is effectively ``workspace/``.
+
+    We accept both. Absolute paths are honored as-is. Adding the
+    workspace-relative fallback is strictly additive — every path that
+    validated before still validates — so existing CLI runs are not
+    affected.
+    """
     candidate = Path(listed_path)
-    if not candidate.is_absolute():
-        candidate = run_root / candidate
-    try:
-        candidate.resolve().relative_to(run_root.resolve())
-    except ValueError:
+    if candidate.is_absolute():
         return candidate.exists()
-    return candidate.exists()
+    # 1. Run-root-relative (canonical AutoR form)
+    via_root = run_root / candidate
+    if via_root.exists():
+        return True
+    # 2. Workspace-relative fallback
+    via_workspace = run_root / "workspace" / candidate
+    if via_workspace.exists():
+        return True
+    return False
 
 
 def _existing_files(directory: Path) -> list[Path]:
@@ -1421,15 +1515,6 @@ def canonicalize_stage_markdown(
             file_refs.insert(0, stage_path)
         files_produced = "\n".join(f"- `{path}`" for path in file_refs[:12]) if file_refs else f"- `{stage_path}`"
 
-    decision_ledger = extract_markdown_section(markdown, "Decision Ledger")
-    if not decision_ledger:
-        decision_ledger = (
-            "- **Open Questions**: Which parts of this stage still require explicit human review before they can be trusted downstream?\n"
-            "- **Locked Decisions**: Preserve the current normalized stage summary structure so the workflow can continue safely.\n"
-            "- **Assumptions**: Existing workspace artifacts and captured execution output remain the best available evidence for this stage.\n"
-            "- **Rejected Alternatives**: Leaving the stage summary incomplete or dropping the currently recovered context."
-        )
-
     suggestions_section = extract_markdown_section(markdown, "Suggestions for Refinement") or ""
     numbered_suggestions = parse_numbered_list(suggestions_section)
     suggestion_items = [numbered_suggestions[key] for key in sorted(numbered_suggestions)] if numbered_suggestions else []
@@ -1445,6 +1530,15 @@ def canonicalize_stage_markdown(
             suggestion_items.append(default_suggestion)
 
     suggestion_items = suggestion_items[:3]
+
+    decision_ledger = extract_markdown_section(markdown, "Decision Ledger")
+    if not decision_ledger:
+        decision_ledger = (
+            "### Open Questions\n\n_None identified._\n\n"
+            "### Locked Decisions\n\n_None yet._\n\n"
+            "### Assumptions\n\n_None yet._\n\n"
+            "### Rejected Alternatives\n\n_None yet._"
+        )
 
     return (
         f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
