@@ -95,3 +95,13 @@ class CodexOperator(ClaudeOperator):
         actual_root = str(paths.run_root.resolve())
         alias_root = str(workspace_alias)
         return prompt.replace(actual_root, alias_root)
+
+    def _select_effective_session_id(
+        self,
+        *,
+        requested_session_id: str | None,
+        observed_session_id: str | None,
+        success: bool,
+    ) -> str | None:
+        del success
+        return observed_session_id or requested_session_id

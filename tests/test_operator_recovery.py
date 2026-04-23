@@ -24,6 +24,48 @@ STAGE_05 = next(stage for stage in STAGES if stage.slug == "05_experimentation")
 
 
 class OperatorRecoveryTests(unittest.TestCase):
+    def _session_id_from_command(self, command: list[str]) -> str:
+        if "--session-id" in command:
+            return command[command.index("--session-id") + 1]
+        if "--resume" in command:
+            return command[command.index("--resume") + 1]
+        self.fail(f"No session flag found in command: {command}")
+
+    def test_claude_start_persists_requested_session_not_observed_result_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_root = Path(tmp_dir) / "run"
+            paths = build_run_paths(run_root)
+            ensure_run_layout(paths)
+            write_text(paths.user_input, "Observed session id mismatch")
+            initialize_memory(paths, "Observed session id mismatch")
+
+            operator = ClaudeOperator(fake_mode=False, output_stream=io.StringIO())
+            stage = STAGES[0]
+            requested_ids: list[str] = []
+
+            def fake_stream(*args, **kwargs):
+                requested_ids.append(self._session_id_from_command(kwargs["command"]))
+                write_text(paths.stage_tmp_file(stage), "# Stage 01: Literature Survey\n")
+                return (
+                    0,
+                    "completed",
+                    "",
+                    "observed-but-not-resumable",
+                    {"raw_line_count": 1, "non_json_line_count": 0, "malformed_json_count": 0},
+                )
+
+            with patch("src.operator.shutil.which", return_value="/usr/bin/claude"), patch.object(
+                operator,
+                "_run_streaming_command",
+                side_effect=fake_stream,
+            ):
+                result = operator._run_real(stage, "prompt", paths, attempt_no=1, continue_session=False)
+
+            self.assertTrue(result.success)
+            self.assertEqual(result.session_id, requested_ids[0])
+            self.assertNotEqual(result.session_id, "observed-but-not-resumable")
+            self.assertEqual(paths.stage_session_file(stage).read_text(encoding="utf-8").strip(), requested_ids[0])
+
     def test_resume_failure_falls_back_to_new_session_and_records_attempt_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             run_root = Path(tmp_dir) / "run"
@@ -38,6 +80,7 @@ class OperatorRecoveryTests(unittest.TestCase):
             operator._persist_stage_session_id(paths, stage, old_session_id)
 
             call_count = {"value": 0}
+            fallback_requested_ids: list[str] = []
 
             def fake_stream(*args, **kwargs):
                 call_count["value"] += 1
@@ -50,6 +93,7 @@ class OperatorRecoveryTests(unittest.TestCase):
                         {"raw_line_count": 1, "non_json_line_count": 1, "malformed_json_count": 1},
                     )
 
+                fallback_requested_ids.append(self._session_id_from_command(kwargs["command"]))
                 stage_tmp_path = paths.stage_tmp_file(stage)
                 write_text(
                     stage_tmp_path,
@@ -88,14 +132,78 @@ class OperatorRecoveryTests(unittest.TestCase):
                 )
 
             self.assertTrue(result.success)
-            self.assertEqual(result.session_id, "new-session-id")
+            self.assertEqual(result.session_id, fallback_requested_ids[0])
             self.assertEqual(call_count["value"], 2)
-            self.assertEqual(paths.stage_session_file(stage).read_text(encoding="utf-8").strip(), "new-session-id")
+            self.assertEqual(paths.stage_session_file(stage).read_text(encoding="utf-8").strip(), result.session_id)
 
             attempt_state = json.loads(paths.stage_attempt_state_file(stage, 1).read_text(encoding="utf-8"))
             self.assertEqual(attempt_state["status"], "completed")
             self.assertEqual(attempt_state["mode"], "resume")
-            self.assertEqual(attempt_state["session_id"], "new-session-id")
+            self.assertEqual(attempt_state["session_id"], result.session_id)
+
+    def test_resume_failure_falls_back_even_when_previous_draft_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_root = Path(tmp_dir) / "run"
+            paths = build_run_paths(run_root)
+            ensure_run_layout(paths)
+            write_text(paths.user_input, "Resume failure with stale draft")
+            initialize_memory(paths, "Resume failure with stale draft")
+
+            operator = ClaudeOperator(fake_mode=False, output_stream=io.StringIO())
+            stage = STAGES[0]
+            old_session_id = "old-session-id"
+            operator._persist_stage_session_id(paths, stage, old_session_id)
+            write_text(paths.stage_tmp_file(stage), "stale draft from previous attempt")
+
+            call_count = {"value": 0}
+            fallback_requested_ids: list[str] = []
+
+            def fake_stream(*args, **kwargs):
+                call_count["value"] += 1
+                command = kwargs["command"]
+                if call_count["value"] == 1:
+                    self.assertIn("--resume", command)
+                    return (
+                        1,
+                        json.dumps(
+                            {
+                                "type": "result",
+                                "subtype": "error_during_execution",
+                                "session_id": "error-payload-session-id",
+                                "errors": [
+                                    "No conversation found with session ID: old-session-id",
+                                ],
+                            }
+                        ),
+                        "",
+                        "error-payload-session-id",
+                        {"raw_line_count": 1, "non_json_line_count": 0, "malformed_json_count": 0},
+                    )
+
+                self.assertIn("--session-id", command)
+                fallback_requested_ids.append(self._session_id_from_command(command))
+                write_text(paths.stage_tmp_file(stage), "# Stage 01: Literature Survey\nRecovered draft.\n")
+                return (
+                    0,
+                    "Recovered successfully.",
+                    "",
+                    "observed-but-not-resumable",
+                    {"raw_line_count": 1, "non_json_line_count": 0, "malformed_json_count": 0},
+                )
+
+            with patch("src.operator.shutil.which", return_value="/usr/bin/claude"), patch.object(
+                operator,
+                "_run_streaming_command",
+                side_effect=fake_stream,
+            ):
+                result = operator._run_real(stage, "prompt", paths, attempt_no=2, continue_session=True)
+
+            self.assertTrue(result.success)
+            self.assertEqual(call_count["value"], 2)
+            self.assertEqual(result.session_id, fallback_requested_ids[0])
+            self.assertNotEqual(result.session_id, "error-payload-session-id")
+            self.assertNotEqual(result.session_id, "observed-but-not-resumable")
+            self.assertEqual(paths.stage_session_file(stage).read_text(encoding="utf-8").strip(), result.session_id)
 
     def test_broken_session_is_not_reused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -121,6 +229,37 @@ class OperatorRecoveryTests(unittest.TestCase):
             resolved = operator._resolve_stage_session_id(paths, stage, continue_session=False)
             self.assertIsNotNone(resolved)
             self.assertNotEqual(resolved, "broken-session-id")
+
+    def test_broken_session_file_is_not_reused_for_repair_resume(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            run_root = Path(tmp_dir) / "run"
+            paths = build_run_paths(run_root)
+            ensure_run_layout(paths)
+            write_text(paths.user_input, "Broken session file test")
+            initialize_memory(paths, "Broken session file test")
+
+            operator = ClaudeOperator(fake_mode=False, output_stream=io.StringIO())
+            stage = STAGES[0]
+            write_text(paths.stage_session_file(stage), "broken-session-id")
+            write_text(
+                paths.stage_session_state_file(stage),
+                json.dumps(
+                    {
+                        "session_id": "broken-session-id",
+                        "broken": True,
+                    },
+                    indent=2,
+                ),
+            )
+
+            resolved = operator._resolve_stage_session_id(
+                paths,
+                stage,
+                continue_session=True,
+                allow_create=False,
+            )
+
+            self.assertIsNone(resolved)
 
 
 class TestResumeFailureDetection(unittest.TestCase):

@@ -81,6 +81,7 @@ class ClaudeOperator:
             paths=paths,
             resume=continue_session,
         )
+        active_command = command
         self._write_attempt_state(
             paths,
             stage,
@@ -123,7 +124,6 @@ class ClaudeOperator:
         if (
             continue_session
             and exit_code != 0
-            and not stage_file.exists()
             and self._looks_like_resume_failure(stdout_text, stderr_text)
         ):
             fallback_session_id = str(uuid.uuid4())
@@ -158,10 +158,15 @@ class ClaudeOperator:
                 stdin_text=fallback_stdin_text,
             )
             session_id = fallback_session_id
+            active_command = fallback_command
 
-        effective_session_id = observed_session_id or session_id
-        self._persist_stage_session_id(paths, stage, effective_session_id)
         success = exit_code == 0 and stage_file.exists()
+        effective_session_id = self._select_effective_session_id(
+            requested_session_id=session_id,
+            observed_session_id=observed_session_id,
+            success=success,
+        )
+        self._persist_stage_session_id(paths, stage, effective_session_id)
         self._update_session_state(
             paths,
             stage,
@@ -182,7 +187,7 @@ class ClaudeOperator:
                 "mode": "resume" if continue_session else "start",
                 "session_id": effective_session_id,
                 "prompt_path": str(prompt_path),
-                "command": command,
+                "command": active_command,
                 "exit_code": exit_code,
                 "stdout_excerpt": stdout_text[-2000:] if stdout_text else "",
                 "stderr_excerpt": stderr_text[-1000:] if stderr_text else "",
@@ -336,7 +341,6 @@ Original stderr:
         if (
             session_id
             and exit_code != 0
-            and not stage_file.exists()
             and self._looks_like_resume_failure(stdout_text, stderr_text)
         ):
             fallback_session_id = str(uuid.uuid4())
@@ -372,15 +376,21 @@ Original stderr:
                 stdin_text=fallback_stdin_text,
             )
             session_id = fallback_session_id
+            command = fallback_command
 
-        effective_session_id = observed_session_id or session_id
+        success = exit_code == 0 and stage_file.exists()
+        effective_session_id = self._select_effective_session_id(
+            requested_session_id=session_id,
+            observed_session_id=observed_session_id,
+            success=success,
+        )
         self._persist_stage_session_id(paths, stage, effective_session_id)
         self._update_session_state(
             paths,
             stage,
             effective_session_id,
             {
-                "broken": exit_code != 0 and not stage_file.exists(),
+                "broken": not success,
                 "last_exit_code": exit_code,
                 "last_mode": "repair",
                 "updated_at": self._now(),
@@ -405,7 +415,7 @@ Original stderr:
         )
 
         return OperatorResult(
-            success=exit_code == 0 and stage_file.exists(),
+            success=success,
             exit_code=exit_code,
             stdout=stdout_text,
             stderr=stderr_text,
@@ -935,6 +945,7 @@ Original stderr:
         continue_session: bool,
         allow_create: bool = True,
     ) -> str | None:
+        broken_session_id: str | None = None
         session_state_path = paths.stage_session_state_file(stage)
         if session_state_path.exists():
             payload = json.loads(read_text(session_state_path))
@@ -942,17 +953,29 @@ Original stderr:
             broken = bool(payload.get("broken", False))
             if session_id and not broken:
                 return session_id
+            if session_id and broken:
+                broken_session_id = session_id
 
         session_file = paths.stage_session_file(stage)
         if session_file.exists():
             session_id = read_text(session_file).strip()
-            if session_id:
+            if session_id and session_id != broken_session_id:
                 return session_id
 
         if continue_session and not allow_create:
             return None
 
         return str(uuid.uuid4())
+
+    def _select_effective_session_id(
+        self,
+        *,
+        requested_session_id: str | None,
+        observed_session_id: str | None,
+        success: bool,
+    ) -> str | None:
+        del observed_session_id, success
+        return requested_session_id
 
     def _persist_stage_session_id(self, paths: RunPaths, stage: StageSpec, session_id: str | None) -> None:
         if not session_id:
