@@ -57,7 +57,7 @@ from .operator_protocol import OperatorProtocol
 from .diagram_gen import post_writing_diagram_hook
 from .terminal_ui import TerminalUI
 from .platform.foundry import generate_paper_package, generate_release_package
-from .writing_manifest import build_writing_manifest, format_manifest_for_prompt
+from .writing_manifest import build_writing_manifest, format_manifest_for_prompt, generate_layout_review
 from .utils import (
     DEFAULT_REFINEMENT_SUGGESTIONS,
     FIXED_STAGE_OPTIONS,
@@ -1138,6 +1138,8 @@ class ResearchManager:
             write_text(result.stage_file_path, stage_markdown)
             if stage.slug == "02_hypothesis_generation":
                 write_hypothesis_manifest(paths, stage_markdown)
+            if stage.slug == "07_writing":
+                generate_layout_review(paths)
             validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
             if validation_errors:
                 mark_stage_failed_manifest(paths, stage, "; ".join(validation_errors))
@@ -1190,6 +1192,8 @@ class ResearchManager:
                 write_text(repair_result.stage_file_path, stage_markdown)
                 if stage.slug == "02_hypothesis_generation":
                     write_hypothesis_manifest(paths, stage_markdown)
+                if stage.slug == "07_writing":
+                    generate_layout_review(paths)
                 validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                 if validation_errors:
                     self.ui.show_status(

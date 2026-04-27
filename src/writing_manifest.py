@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+import re
 
 from .artifact_index import indexed_artifacts_for_category, write_artifact_index
-from .utils import RunPaths
+from .utils import RunPaths, read_text
 
 
 FIGURE_SUFFIXES = {".png", ".pdf", ".svg", ".jpg", ".jpeg", ".eps"}
 RESULT_SUFFIXES = {".json", ".jsonl", ".csv", ".tsv", ".parquet", ".npz", ".npy"}
+_LATEX_WARNING_SAMPLE_LIMIT = 5
 
 
 def build_writing_manifest(paths: RunPaths) -> dict[str, object]:
@@ -22,6 +24,9 @@ def build_writing_manifest(paths: RunPaths) -> dict[str, object]:
         "data_files": indexed_artifacts_for_category(artifact_index, "data"),
         "stage_summaries": _collect_stage_summaries(paths),
     }
+    layout_review = _load_layout_review_summary(paths)
+    if layout_review is not None:
+        manifest["layout_review"] = layout_review
 
     paths.writing_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = paths.writing_dir / "manifest.json"
@@ -71,6 +76,25 @@ def format_manifest_for_prompt(manifest: dict[str, object]) -> str:
     artifact_index_path = manifest.get("artifact_index_path")
     if isinstance(artifact_index_path, str) and artifact_index_path.strip():
         parts.append(f"Artifact index: `{artifact_index_path}`")
+
+    layout_review = manifest.get("layout_review")
+    if isinstance(layout_review, dict):
+        parts.append("\n### Layout Review")
+        review_path = str(layout_review.get("path") or "").strip()
+        if review_path:
+            parts.append(f"- Layout review artifact: `{review_path}`")
+        status = str(layout_review.get("overall_status") or "").strip()
+        if status:
+            parts.append(f"- Overall status: {status}")
+        issue_counts = layout_review.get("issue_counts")
+        if isinstance(issue_counts, dict) and issue_counts:
+            counts = ", ".join(f"{key}={value}" for key, value in sorted(issue_counts.items()))
+            parts.append(f"- Issue counts: {counts}")
+        fixes = layout_review.get("priority_fixes")
+        if isinstance(fixes, list) and fixes:
+            parts.append("- Priority fixes:")
+            for fix in fixes[:3]:
+                parts.append(f"  - {fix}")
 
     figures = manifest.get("figures", [])
     if isinstance(figures, list) and figures:
@@ -137,6 +161,144 @@ def _collect_stage_summaries(paths: RunPaths) -> dict[str, str]:
     return summaries
 
 
+def generate_layout_review(paths: RunPaths) -> dict[str, object]:
+    pdf_path = _find_preferred_pdf(paths)
+    build_log_path = _find_existing_path(
+        [
+            paths.artifacts_dir / "build_log.txt",
+            paths.writing_dir / "build.log",
+            paths.artifacts_dir / "build.log",
+            paths.artifacts_dir / "paper_package" / "build.log",
+        ]
+    )
+    build_log_text = read_text(build_log_path) if build_log_path is not None else ""
+
+    overfull_lines = _extract_matching_lines(build_log_text, r"Overfull \\hbox")
+    underfull_lines = _extract_matching_lines(build_log_text, r"Underfull \\hbox")
+    undefined_ref_lines = _extract_matching_lines(build_log_text, r"Reference [`'][^`']+['`] on page \d+ undefined|Reference [`'][^`']+['`] undefined")
+    undefined_citation_lines = _extract_matching_lines(build_log_text, r"Citation [`'][^`']+['`] on page \d+ undefined|Citation [`'][^`']+['`] undefined")
+    missing_file_lines = _extract_matching_lines(build_log_text, r"(File|Package).*not found|No file .*")
+
+    issue_counts = {
+        "overfull_hboxes": len(overfull_lines),
+        "underfull_hboxes": len(underfull_lines),
+        "undefined_references": len(undefined_ref_lines),
+        "undefined_citations": len(undefined_citation_lines),
+        "missing_file_warnings": len(missing_file_lines),
+    }
+    issue_counts["total"] = sum(issue_counts.values())
+
+    issues: list[dict[str, object]] = []
+    if pdf_path is None:
+        issues.append(
+            {
+                "category": "pdf",
+                "severity": "major",
+                "summary": "Compiled paper PDF was not found under workspace/writing or workspace/artifacts.",
+                "evidence": [],
+            }
+        )
+    if overfull_lines:
+        issues.append(
+            {
+                "category": "overfull_hbox",
+                "severity": "major" if len(overfull_lines) >= 3 else "minor",
+                "summary": f"Detected {len(overfull_lines)} overfull box warning(s) that can indicate text or figure overflow.",
+                "evidence": overfull_lines[:_LATEX_WARNING_SAMPLE_LIMIT],
+            }
+        )
+    if underfull_lines:
+        issues.append(
+            {
+                "category": "underfull_hbox",
+                "severity": "minor",
+                "summary": f"Detected {len(underfull_lines)} underfull box warning(s) that can indicate weak paragraph breaks or spacing.",
+                "evidence": underfull_lines[:_LATEX_WARNING_SAMPLE_LIMIT],
+            }
+        )
+    if undefined_ref_lines:
+        issues.append(
+            {
+                "category": "undefined_reference",
+                "severity": "major",
+                "summary": f"Detected {len(undefined_ref_lines)} undefined reference warning(s).",
+                "evidence": undefined_ref_lines[:_LATEX_WARNING_SAMPLE_LIMIT],
+            }
+        )
+    if undefined_citation_lines:
+        issues.append(
+            {
+                "category": "undefined_citation",
+                "severity": "major",
+                "summary": f"Detected {len(undefined_citation_lines)} undefined citation warning(s).",
+                "evidence": undefined_citation_lines[:_LATEX_WARNING_SAMPLE_LIMIT],
+            }
+        )
+    if missing_file_lines:
+        issues.append(
+            {
+                "category": "missing_asset",
+                "severity": "major",
+                "summary": f"Detected {len(missing_file_lines)} missing-file or missing-package warning(s).",
+                "evidence": missing_file_lines[:_LATEX_WARNING_SAMPLE_LIMIT],
+            }
+        )
+
+    priority_fixes = _suggest_layout_fixes(
+        pdf_available=pdf_path is not None,
+        overfull_count=len(overfull_lines),
+        undefined_ref_count=len(undefined_ref_lines),
+        undefined_citation_count=len(undefined_citation_lines),
+        missing_file_count=len(missing_file_lines),
+        underfull_count=len(underfull_lines),
+    )
+
+    review = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "overall_status": "needs_attention" if issues else "clean",
+        "pdf_available": pdf_path is not None,
+        "pdf_relative_path": str(pdf_path.relative_to(paths.run_root)) if pdf_path is not None else None,
+        "estimated_page_count": _estimate_pdf_page_count(pdf_path),
+        "build_log_checked": build_log_path is not None,
+        "build_log_relative_path": str(build_log_path.relative_to(paths.run_root)) if build_log_path is not None else None,
+        "issue_counts": issue_counts,
+        "issues": issues,
+        "priority_fixes": priority_fixes,
+    }
+    output_path = paths.artifacts_dir / "layout_review.json"
+    output_path.write_text(json.dumps(review, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    return review
+
+
+def validate_layout_review(path: Path) -> list[str]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return ["layout_review.json is missing."]
+    except json.JSONDecodeError as exc:
+        return [f"layout_review.json is not valid JSON: {exc}"]
+
+    problems: list[str] = []
+    if not isinstance(payload, dict):
+        return ["layout_review.json must contain a JSON object."]
+    if not isinstance(payload.get("overall_status"), str) or not str(payload.get("overall_status")).strip():
+        problems.append("layout_review.json must contain a non-empty string field 'overall_status'.")
+    if not isinstance(payload.get("pdf_available"), bool):
+        problems.append("layout_review.json must contain a boolean field 'pdf_available'.")
+    if not isinstance(payload.get("build_log_checked"), bool):
+        problems.append("layout_review.json must contain a boolean field 'build_log_checked'.")
+    issue_counts = payload.get("issue_counts")
+    if not isinstance(issue_counts, dict):
+        problems.append("layout_review.json must contain an object field 'issue_counts'.")
+    issues = payload.get("issues")
+    if not isinstance(issues, list):
+        problems.append("layout_review.json must contain a list field 'issues'.")
+    priority_fixes = payload.get("priority_fixes")
+    if not isinstance(priority_fixes, list) or not all(isinstance(item, str) and item.strip() for item in priority_fixes):
+        problems.append("layout_review.json must contain a non-empty string list field 'priority_fixes'.")
+    return problems
+
+
 def _format_schema(schema: object) -> str:
     if not isinstance(schema, dict) or not schema:
         return ""
@@ -157,3 +319,91 @@ def _format_schema(schema: object) -> str:
         pieces.append(f"schema={schema['sidecar_path']}")
 
     return ", ".join(pieces)
+
+
+def _load_layout_review_summary(paths: RunPaths) -> dict[str, object] | None:
+    path = paths.artifacts_dir / "layout_review.json"
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "path": str(path.relative_to(paths.run_root)),
+            "overall_status": "invalid",
+            "issue_counts": {},
+            "priority_fixes": [],
+        }
+    if not isinstance(payload, dict):
+        return None
+    return {
+        "path": str(path.relative_to(paths.run_root)),
+        "overall_status": payload.get("overall_status"),
+        "issue_counts": payload.get("issue_counts") if isinstance(payload.get("issue_counts"), dict) else {},
+        "priority_fixes": payload.get("priority_fixes") if isinstance(payload.get("priority_fixes"), list) else [],
+    }
+
+
+def _find_preferred_pdf(paths: RunPaths) -> Path | None:
+    preferred = _find_existing_path(
+        [
+            paths.artifacts_dir / "paper.pdf",
+            paths.writing_dir / "main.pdf",
+            paths.artifacts_dir / "paper_package" / "paper.pdf",
+        ]
+    )
+    if preferred is not None:
+        return preferred
+    for directory in [paths.writing_dir, paths.artifacts_dir]:
+        for candidate in sorted(directory.rglob("*.pdf")):
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def _find_existing_path(candidates: list[Path]) -> Path | None:
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _extract_matching_lines(text: str, pattern: str) -> list[str]:
+    matcher = re.compile(pattern)
+    return [line.strip() for line in text.splitlines() if matcher.search(line)]
+
+
+def _estimate_pdf_page_count(path: Path | None) -> int | None:
+    if path is None or not path.exists():
+        return None
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    count = len(re.findall(rb"/Type\s*/Page\b", raw))
+    return count or None
+
+
+def _suggest_layout_fixes(
+    *,
+    pdf_available: bool,
+    overfull_count: int,
+    undefined_ref_count: int,
+    undefined_citation_count: int,
+    missing_file_count: int,
+    underfull_count: int,
+) -> list[str]:
+    fixes: list[str] = []
+    if not pdf_available:
+        fixes.append("Compile the manuscript to a real PDF and verify the final paper artifact before approval.")
+    if undefined_ref_count or undefined_citation_count:
+        fixes.append("Resolve undefined references and citations, then recompile until cross-references stabilize.")
+    if missing_file_count:
+        fixes.append("Fix missing figure, bibliography, or LaTeX package paths referenced by the manuscript.")
+    if overfull_count:
+        fixes.append("Tighten overflowing paragraphs, captions, and figure/table widths to remove overfull boxes.")
+    if underfull_count and len(fixes) < 3:
+        fixes.append("Improve paragraph breaks or float placement where underfull box warnings remain.")
+    if not fixes:
+        fixes.append("No major layout issues were detected from the available build artifacts; perform a final visual pass before approval.")
+    return fixes[:3]

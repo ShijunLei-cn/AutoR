@@ -949,12 +949,23 @@ def validate_stage_artifacts(stage: StageSpec, paths: RunPaths) -> list[str]:
                 f"{stage.stage_title} requires self_review.json under workspace/artifacts."
             )
 
+        if not (paths.artifacts_dir / "layout_review.json").exists():
+            problems.append(
+                f"{stage.stage_title} requires layout_review.json under workspace/artifacts."
+            )
+        else:
+            from .writing_manifest import validate_layout_review
+
+            for problem in validate_layout_review(paths.artifacts_dir / "layout_review.json"):
+                problems.append(f"{stage.stage_title}: {problem}")
+
         if stage.number == 7 and freshness_cutoff is not None:
             stage7_required_files = [
                 main_tex,
                 paths.artifacts_dir / "build_log.txt",
                 paths.artifacts_dir / "citation_verification.json",
                 paths.artifacts_dir / "self_review.json",
+                paths.artifacts_dir / "layout_review.json",
             ]
             if not all(path.exists() and path.stat().st_mtime >= freshness_cutoff for path in stage7_required_files):
                 problems.append(
@@ -1232,9 +1243,13 @@ def _extract_path_references(text: str) -> list[str]:
     seen: set[str] = set()
     paths: list[str] = []
 
-    for candidate in re.findall(r"`([^`]+)`", text):
+    for candidate in re.findall(r"`([^`\n\r]+)`", text):
         normalized = candidate.strip()
         if not normalized:
+            continue
+
+        # Reject multi-line or excessively long strings — not valid file paths
+        if "\n" in normalized or "\r" in normalized or len(normalized) > 512:
             continue
 
         if not (
@@ -1274,16 +1289,19 @@ def _listed_file_exists(run_root: Path, listed_path: str) -> bool:
     affected.
     """
     candidate = Path(listed_path)
-    if candidate.is_absolute():
-        return candidate.exists()
-    # 1. Run-root-relative (canonical AutoR form)
-    via_root = run_root / candidate
-    if via_root.exists():
-        return True
-    # 2. Workspace-relative fallback
-    via_workspace = run_root / "workspace" / candidate
-    if via_workspace.exists():
-        return True
+    try:
+        if candidate.is_absolute():
+            return candidate.exists()
+        # 1. Run-root-relative (canonical AutoR form)
+        via_root = run_root / candidate
+        if via_root.exists():
+            return True
+        # 2. Workspace-relative fallback
+        via_workspace = run_root / "workspace" / candidate
+        if via_workspace.exists():
+            return True
+    except OSError:
+        return False
     return False
 
 

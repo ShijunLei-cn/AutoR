@@ -19,7 +19,13 @@ from src.utils import (
     validate_stage_artifacts,
     write_text,
 )
-from src.writing_manifest import build_writing_manifest, format_manifest_for_prompt, scan_figures
+from src.writing_manifest import (
+    build_writing_manifest,
+    format_manifest_for_prompt,
+    generate_layout_review,
+    scan_figures,
+    validate_layout_review,
+)
 
 
 STAGE_07 = next(stage for stage in STAGES if stage.slug == "07_writing")
@@ -92,6 +98,7 @@ class WritingPipelineTests(unittest.TestCase):
             paths.artifacts_dir / "self_review.json",
             json.dumps({"overall_score": 8.0, "final_verdict": "ready", "rounds": 1}),
         )
+        generate_layout_review(paths)
 
     def test_stage07_validation_passes_with_expected_outputs(self) -> None:
         _, paths = self._build_paths()
@@ -283,6 +290,13 @@ class WritingPipelineTests(unittest.TestCase):
         problems = validate_stage_artifacts(STAGE_07, paths)
         self.assertTrue(any("self_review.json" in problem for problem in problems))
 
+    def test_stage07_validation_requires_layout_review(self) -> None:
+        _, paths = self._build_paths()
+        self._populate_valid_stage07_outputs(paths)
+        (paths.artifacts_dir / "layout_review.json").unlink()
+        problems = validate_stage_artifacts(STAGE_07, paths)
+        self.assertTrue(any("layout_review.json" in problem for problem in problems))
+
     def test_stage07_validation_requires_claim_coverage_in_citation_verification(self) -> None:
         _, paths = self._build_paths()
         self._populate_valid_stage07_outputs(paths)
@@ -301,17 +315,38 @@ class WritingPipelineTests(unittest.TestCase):
 
     def test_build_writing_manifest_creates_manifest_json(self) -> None:
         _, paths = self._build_paths()
+        generate_layout_review(paths)
         manifest = build_writing_manifest(paths)
         self.assertIn("figures", manifest)
         self.assertIn("result_files", manifest)
         self.assertTrue((paths.writing_dir / "manifest.json").exists())
+        self.assertIn("layout_review", manifest)
 
     def test_format_manifest_for_prompt_mentions_figures_and_results(self) -> None:
         _, paths = self._build_paths()
+        generate_layout_review(paths)
         manifest = build_writing_manifest(paths)
         formatted = format_manifest_for_prompt(manifest)
         self.assertIn("accuracy.png", formatted)
         self.assertIn("metrics.json", formatted)
+        self.assertIn("layout_review.json", formatted)
+
+    def test_generate_layout_review_captures_latex_warnings(self) -> None:
+        _, paths = self._build_paths()
+        self._populate_valid_stage07_outputs(paths)
+        write_text(
+            paths.artifacts_dir / "build_log.txt",
+            (
+                "Overfull \\hbox (12.0pt too wide) in paragraph at lines 12--13\n"
+                "LaTeX Warning: Citation `missing2026' on page 2 undefined\n"
+            ),
+        )
+        review = generate_layout_review(paths)
+
+        self.assertEqual(review["overall_status"], "needs_attention")
+        self.assertEqual(review["issue_counts"]["overfull_hboxes"], 1)
+        self.assertEqual(review["issue_counts"]["undefined_citations"], 1)
+        self.assertEqual(validate_layout_review(paths.artifacts_dir / "layout_review.json"), [])
 
     def test_registry_yaml_exists_and_mentions_conference_and_journal_profiles(self) -> None:
         registry_path = Path("templates/registry.yaml")

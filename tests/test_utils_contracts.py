@@ -4,9 +4,12 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.utils import (
     STAGES,
+    _extract_path_references,
+    _listed_file_exists,
     build_run_paths,
     canonicalize_stage_markdown,
     ensure_run_config,
@@ -145,6 +148,27 @@ class UtilsContractTests(unittest.TestCase):
         problems = validate_stage_markdown(markdown, stage=stage, paths=paths)
 
         self.assertEqual(problems, [])
+
+    def test_extract_path_references_ignores_multiline_and_oversized_backticks(self) -> None:
+        oversized_name = "a" * 600
+        text = (
+            "Keep `workspace/results/metrics.json`.\n"
+            "Ignore `not a real\npath block`.\n"
+            f"Ignore `workspace/notes/{oversized_name}.md`.\n"
+            "Keep `workspace/figures/summary.png`.\n"
+        )
+
+        self.assertEqual(
+            _extract_path_references(text),
+            [
+                "workspace/results/metrics.json",
+                "workspace/figures/summary.png",
+            ],
+        )
+
+    def test_listed_file_exists_returns_false_on_oserror(self) -> None:
+        with patch("pathlib.Path.exists", side_effect=OSError("path too long")):
+            self.assertFalse(_listed_file_exists(Path("/tmp/run"), "workspace/results/metrics.json"))
 
 
 if __name__ == "__main__":
