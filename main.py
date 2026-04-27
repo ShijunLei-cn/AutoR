@@ -161,7 +161,6 @@ def create_reviewer(
         stage_timeout=stage_timeout,
     )
 
-
 def resolve_stage(value: str | None) -> StageSpec | None:
     if value is None:
         return None
