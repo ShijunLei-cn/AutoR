@@ -62,6 +62,7 @@ Additional generated artifacts should go under `{{WORKSPACE_ARTIFACTS_DIR}}`, su
 - `paper.pdf`
 - `build_log.txt`
 - `citation_verification.json`
+- `layout_review.json`
 - `self_review.json`
 - `submission_bundle.zip`
 
@@ -77,6 +78,8 @@ The manifest summarizes available:
 - approved stage summaries from `stages/*.md`
 
 Use these artifacts directly. Do not fabricate data, figures, tables, or results.
+
+If `{{WORKSPACE_ARTIFACTS_DIR}}/layout_review.json` already exists from a prior iteration, treat it as the highest-priority layout triage artifact. Fix its top issues before polishing lower-value prose details.
 
 ## Workflow
 
@@ -146,24 +149,33 @@ Minimum bar:
 19. Fix LaTeX errors, reference issues, citation issues, and missing figure issues where possible.
 20. If compilation partially fails, still leave a clear build log that explains what succeeded and what remains broken.
 21. Produce a PDF under `{{WORKSPACE_WRITING_DIR}}` or `{{WORKSPACE_ARTIFACTS_DIR}}`.
+22. Review the compiled paper for layout issues. If the selected backend can inspect the PDF directly, use that signal; otherwise rely on the build log, page structure, and generated figures to identify layout problems conservatively.
+23. Write `{{WORKSPACE_ARTIFACTS_DIR}}/layout_review.json` summarizing:
+    - overall layout status
+    - whether a PDF was available for review
+    - page count if you can determine it
+    - overfull/underfull box warnings
+    - undefined references or citations
+    - missing figure or package problems
+    - the top 3 priority layout fixes
 
 ### Phase 6: Packaging
 
-22. Copy the final compiled PDF to `{{WORKSPACE_ARTIFACTS_DIR}}/paper.pdf` if needed.
-23. Write `{{WORKSPACE_ARTIFACTS_DIR}}/build_log.txt` summarizing:
+24. Copy the final compiled PDF to `{{WORKSPACE_ARTIFACTS_DIR}}/paper.pdf` if needed.
+25. Write `{{WORKSPACE_ARTIFACTS_DIR}}/build_log.txt` summarizing:
     - venue target
     - compile attempts
     - major warnings or failures
     - final status
-24. Write `{{WORKSPACE_ARTIFACTS_DIR}}/citation_verification.json` summarizing:
+26. Write `{{WORKSPACE_ARTIFACTS_DIR}}/citation_verification.json` summarizing:
     - total citations
     - verified citations
     - unresolved citations
     - missing figures
     - broken refs or labels if any
     - `claim_coverage`: major manuscript claims, each mapped to citation keys or source IDs
-25. Package a submission bundle when practical.
-26. Write the stage summary draft to `{{STAGE_OUTPUT_PATH}}`.
+27. Package a submission bundle when practical.
+28. Write the stage summary draft to `{{STAGE_OUTPUT_PATH}}`.
 
 ## Filesystem Requirements
 

@@ -949,12 +949,23 @@ def validate_stage_artifacts(stage: StageSpec, paths: RunPaths) -> list[str]:
                 f"{stage.stage_title} requires self_review.json under workspace/artifacts."
             )
 
+        if not (paths.artifacts_dir / "layout_review.json").exists():
+            problems.append(
+                f"{stage.stage_title} requires layout_review.json under workspace/artifacts."
+            )
+        else:
+            from .writing_manifest import validate_layout_review
+
+            for problem in validate_layout_review(paths.artifacts_dir / "layout_review.json"):
+                problems.append(f"{stage.stage_title}: {problem}")
+
         if stage.number == 7 and freshness_cutoff is not None:
             stage7_required_files = [
                 main_tex,
                 paths.artifacts_dir / "build_log.txt",
                 paths.artifacts_dir / "citation_verification.json",
                 paths.artifacts_dir / "self_review.json",
+                paths.artifacts_dir / "layout_review.json",
             ]
             if not all(path.exists() and path.stat().st_mtime >= freshness_cutoff for path in stage7_required_files):
                 problems.append(
