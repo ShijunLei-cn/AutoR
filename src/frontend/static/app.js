@@ -2081,6 +2081,11 @@ function readHashPage() {
 
 function setConnection(text) {
   elements.connectionStatus.textContent = text;
+  const t = (text || "").toLowerCase();
+  let status = "connecting";
+  if (t.includes("error")) status = "error";
+  else if (t.includes("idle") || t.includes("ready") || t.includes("connected") || t.includes("ok")) status = "ok";
+  elements.connectionStatus.dataset.status = status;
 }
 
 async function safeAction(promise) {
